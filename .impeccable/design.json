@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-27T00:00:00-03:00",
+  "title": "Sistema de diseño: Sincronizador Obras",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "panel-light",
+        "value": "0 18px 40px rgba(112, 144, 176, 0.12)",
+        "purpose": "Sombra compartida por cabecera, métricas, tabla y modal en modo claro."
+      },
+      {
+        "name": "panel-dark",
+        "value": "0 4px 15px rgba(0,0,0,0.4)",
+        "purpose": "Sombra compartida por paneles en modo oscuro."
+      },
+      {
+        "name": "master-action",
+        "value": "0 4px 15px rgba(67, 24, 255, 0.3)",
+        "purpose": "Sombra del botón de sincronización semanal."
+      }
+    ],
+    "motion": [
+      {
+        "name": "component-transition",
+        "value": "0.2s",
+        "purpose": "Transición base observada en botones, elementos de semana, etiquetas y controles de estado."
+      },
+      {
+        "name": "panel-transition",
+        "value": "0.3s",
+        "purpose": "Transición observada en cuerpo, paneles y modal."
+      },
+      {
+        "name": "progress-transition",
+        "value": "0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Transición de la barra de progreso."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón de acción de fila",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción local de sincronización en una fila de factura.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">🔄 Sinc.</button>",
+      "css": ".ds-btn-primary { padding: 10px 14px; border: none; border-radius: 8px; background: #4318FF; color: white; font: 600 0.85rem Poppins, sans-serif; cursor: pointer; transition: 0.2s; }"
+    },
+    {
+      "name": "Botón maestro de semana",
+      "kind": "button",
+      "refersTo": "button-master",
+      "description": "Acción principal para sincronizar la semana seleccionada.",
+      "html": "<button class=\"ds-btn-master\" type=\"button\">🚀 Actualizar Semana</button>",
+      "css": ".ds-btn-master { padding: 12px 20px; border: none; border-radius: 12px; background: linear-gradient(135deg, #868CFF 0%, #4318FF 100%); color: white; box-shadow: 0 4px 15px rgba(67, 24, 255, 0.3); font: 600 0.9rem Poppins, sans-serif; cursor: pointer; }"
+    },
+    {
+      "name": "Elemento de semana activo",
+      "kind": "nav",
+      "refersTo": "week-item-active",
+      "description": "Selección de semana en la barra lateral; el HTML productivo usa un elemento de lista interactivo.",
+      "html": "<div class=\"ds-week-item ds-week-item-active\">● Semana 39</div>",
+      "css": ".ds-week-item { display: flex; align-items: center; padding: 14px 16px; border-radius: 12px; color: #A3AED0; font: 500 0.95rem Poppins, sans-serif; cursor: pointer; transition: 0.2s; } .ds-week-item:hover { background: #f4f7fe; color: #4318FF; } .ds-week-item-active { background: #4318FF; color: white; }"
+    },
+    {
+      "name": "Campo de OT con etiquetas",
+      "kind": "input",
+      "refersTo": "tag",
+      "description": "Entrada de OT que combina píldoras existentes y escritura directa.",
+      "html": "<div class=\"ds-tags\"><span class=\"ds-tag\">OT-1001 <b>×</b></span><input class=\"ds-tag-input\" placeholder=\"Añadir OT...\"></div>",
+      "css": ".ds-tags { display: flex; flex-wrap: wrap; gap: 6px; min-height: 42px; padding: 6px 10px; border: 1px solid #E0E5F2; border-radius: 8px; background: #f4f7fe; cursor: text; transition: 0.3s; } .ds-tags:focus-within { border-color: #4318FF; background: #ffffff; } .ds-tag { display: flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 16px; background: #4318FF; color: white; box-shadow: 0 2px 4px rgba(67, 24, 255, 0.2); font: 500 0.85rem Poppins, sans-serif; } .ds-tag-input { flex-grow: 1; min-width: 120px; border: none; outline: none; background: transparent; color: #2B3674; font: 0.95rem Poppins, sans-serif; }"
+    },
+    {
+      "name": "Control de estado documental",
+      "kind": "custom",
+      "refersTo": "status-control",
+      "description": "Botón circular con icono y estado accesible para factura, solicitud o comprobante.",
+      "html": "<button class=\"ds-status ds-status-pending\" type=\"button\" aria-label=\"Factura pendiente. Clic para cambiar\" aria-pressed=\"false\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h9l3 3v15H6z\"/><path d=\"M15 3v4h3M9 12h6M9 16h6\"/></svg></button>",
+      "css": ".ds-status { display: inline-flex; width: 23px; height: 23px; align-items: center; justify-content: center; padding: 0; border: 2px solid; border-radius: 50%; font-size: 0.72rem; line-height: 1; cursor: pointer; transition: 0.2s; } .ds-status:hover:not(:disabled) { transform: scale(1.12); } .ds-status:disabled { cursor: not-allowed; opacity: 0.45; } .ds-status svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .ds-status-pending { color: #f59e0b; border-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }"
+    },
+    {
+      "name": "Insignia de sincronización",
+      "kind": "custom",
+      "description": "Estado textual compacto de sincronización o excepción por fila.",
+      "html": "<span class=\"ds-badge ds-badge-success\">✓ Sincronizado</span>",
+      "css": ".ds-badge { display: inline-block; min-width: 105px; padding: 6px 12px; border-radius: 20px; text-align: center; font: 600 0.8rem Poppins, sans-serif; cursor: help; transition: 0.3s; } .ds-badge-success { background: rgba(1, 181, 116, 0.15); color: #01B574; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Document Operations Desk",
+    "overview": "Esta línea base describe la interfaz existente; no prescribe un rediseño. Hecho observado: la pantalla agrupa una semana seleccionada, sus carpetas de factura, las OT asociadas, los archivos desplegables y las acciones de sincronización. Intención inferida: la metáfora elegida resume ese flujo operativo como un escritorio de documentos donde el trabajo se revisa y resuelve por fila.",
+    "keyCharacteristics": [
+      "Hecho observado: Poppins, superficies claras redondeadas y sombra suave para paneles principales.",
+      "Hecho observado: violeta para selección, acciones y OT; verde, ámbar y rojo para progreso y excepción.",
+      "Intención inferida: la fila de factura es la unidad de trabajo que conecta carpeta, OT, archivos y sincronización."
+    ],
+    "rules": [
+      {
+        "name": "La regla de señal",
+        "body": "En la implementación actual, el violeta identifica acción o selección; los colores de estado comunican resultado operativo, no decoración.",
+        "section": "colors"
+      },
+      {
+        "name": "La regla de superficie de trabajo",
+        "body": "En la interfaz actual, la elevación distingue contenedores de trabajo y acciones maestras; las filas y los campos se separan principalmente con bordes y tonos de fondo.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Haz conservar la lectura semanal: semana → carpeta de factura → OT → archivos → sincronización.",
+      "Haz usar las variantes semánticas existentes para selección y estado, acompañándolas con texto, icono o nombre accesible cuando el código ya lo hace.",
+      "Haz mantener la densidad de tabla y la expansión de archivos como patrón de inspección por fila."
+    ],
+    "donts": [
+      "No interpretes “The Document Operations Desk” como autorización para cambiar interfaz, flujo, paleta o jerarquía.",
+      "No conviertas colores de estado en una única fuente de significado: los hallazgos actuales de foco y semántica siguen siendo limitaciones a corregir en trabajo posterior autorizado.",
+      "No asumas una experiencia móvil o de teclado completa: no está probada ni completamente codificada en la implementación observada."
+    ]
+  }
+}
