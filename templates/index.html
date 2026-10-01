@@ -764,7 +764,7 @@
         .cobros-head small { color: var(--text-muted); font-size: .64rem; }
         .cobros-form {
             display: none;
-            grid-template-columns: minmax(120px,1.2fr) minmax(150px,1.7fr) 120px 110px 130px auto;
+            grid-template-columns: minmax(150px,1.35fr) minmax(180px,1.7fr) 110px 130px auto;
             gap: 6px;
             padding: 8px 10px;
             border-bottom: 1px solid var(--border);
@@ -940,7 +940,6 @@
                         <input type="hidden" id="cobroCarpetaActual">
                         <input id="cobroCarpeta" maxlength="120" required placeholder="Nombre de carpeta" aria-label="Nombre de carpeta">
                         <input id="cobroDetalle" maxlength="180" placeholder="Concepto / detalle" aria-label="Concepto o detalle">
-                        <input id="cobroOT" maxlength="80" placeholder="OT opcional" aria-label="OT opcional">
                         <select id="cobroTipo" aria-label="Tipo de cobro">
                             <option value="transferencia">Transferencia</option>
                             <option value="abono">Abono</option>
@@ -2365,14 +2364,13 @@
         function mostrarFormularioCobro(item = null) {
             const form=document.getElementById('cobrosForm');
             form.classList.add('visible');
-            document.getElementById('cobroId').value=item?.id || '';
-            document.getElementById('cobroNombre').value=item?.nombre || '';
+            document.getElementById('cobroCarpetaActual').value=item?.carpeta || '';
+            document.getElementById('cobroCarpeta').value=item?.carpeta || '';
             document.getElementById('cobroDetalle').value=item?.detalle || '';
-            document.getElementById('cobroOT').value=item?.ot || '';
             document.getElementById('cobroTipo').value=item?.tipo || 'transferencia';
             document.getElementById('cobroMonto').value=item?.monto ? String(item.monto) : '';
-            document.getElementById('btnNuevoCobro').textContent=item ? 'Editando cobro' : '＋ Agregar cobro';
-            setTimeout(()=>document.getElementById('cobroNombre').focus(),0);
+            document.getElementById('btnNuevoCobro').textContent=item ? 'Editando carpeta' : '＋ Nueva carpeta + cobro';
+            setTimeout(()=>document.getElementById('cobroCarpeta').focus(),0);
         }
 
         function cerrarFormularioCobro() {
@@ -2380,7 +2378,7 @@
             if (!form) return;
             form.classList.remove('visible');
             form.reset();
-            document.getElementById('cobroId').value='';
+            document.getElementById('cobroCarpetaActual').value='';
             const btn=document.getElementById('btnNuevoCobro');
             if (btn) btn.textContent='＋ Agregar cobro';
         }
@@ -2391,9 +2389,11 @@
             actualizarTotalACobrar();
 
             const resumen=document.getElementById('cobrosResumen');
-            resumen.textContent=cobrosActuales.length
-                ? `${data.pendientes || 0} pendiente(s) · ${dineroCLP(ultimoCobrosPendientes)}${data.realizados ? ` · ${data.realizados} realizado(s)` : ''}`
-                : 'Sin cobros cargados';
+            const partes=[];
+            if (data.pendientes) partes.push(`${data.pendientes} por transferir · ${dineroCLP(ultimoCobrosPendientes)}`);
+            if (data.sin_monto) partes.push(`${data.sin_monto} sin monto`);
+            if (data.realizados) partes.push(`${data.realizados} realizado(s)`);
+            resumen.textContent=cobrosActuales.length ? partes.join(' · ') : 'No hay carpetas sin factura';
 
             const tbody=document.getElementById('cobrosFilas');
             const frag=document.createDocumentFragment();
@@ -2402,7 +2402,9 @@
                 const tr=document.createElement('tr');
                 const tdTexto=valor=>{const td=document.createElement('td');td.textContent=valor || '—';return td;};
 
-                const nombre=tdTexto(item.nombre);
+                const carpeta=tdTexto(item.carpeta);
+                carpeta.title='Carpeta real en el servidor';
+
                 const detalle=tdTexto(item.detalle);
                 const ot=tdTexto(item.ot);
                 if (item.ot) {
@@ -2414,42 +2416,53 @@
                         abrirCarpeta('ot',{ot:item.ot});
                     });
                 }
-                const tipo=tdTexto(item.tipo === 'abono' ? 'Abono' : 'Transferencia');
 
-                const monto=tdTexto(dineroCLP(item.monto));
+                const tipo=tdTexto(item.tipo === 'abono' ? 'Abono' : 'Transferencia');
+                const monto=tdTexto(item.monto ? dineroCLP(item.monto) : '—');
                 monto.className='cobro-monto';
 
                 const estado=document.createElement('td');
                 const estadoVisual=document.createElement('span');
-                estadoVisual.className='cobro-status '+(item.estado === 'realizado' ? 'realizado' : '');
+                const realizado=item.configurado && item.estado === 'realizado';
+                estadoVisual.className='cobro-status '+(realizado ? 'realizado' : '');
                 const dot=document.createElement('span'); dot.className='cobro-dot';
                 const estadoTexto=document.createElement('span');
-                estadoTexto.textContent=item.estado === 'realizado' ? 'Realizado' : 'Pendiente';
+                estadoTexto.textContent=!item.configurado ? 'Sin monto' : (realizado ? 'Realizado' : 'Pendiente');
                 estadoVisual.append(dot,estadoTexto);
                 estado.appendChild(estadoVisual);
 
                 const acciones=document.createElement('td');
                 const grupo=document.createElement('div'); grupo.className='cobro-actions';
 
+                const abrir=document.createElement('button');
+                abrir.type='button'; abrir.className='btn-ghost';
+                abrir.textContent='📂'; abrir.title='Abrir carpeta';
+                abrir.addEventListener('click',()=>abrirCarpeta('factura',{ruta:item.ruta}));
+
                 const editar=document.createElement('button');
                 editar.type='button'; editar.className='btn-ghost';
-                editar.textContent='✎'; editar.title='Editar cobro';
+                editar.textContent='✎'; editar.title=item.configurado ? 'Editar monto manual' : 'Ingresar monto manual';
                 editar.addEventListener('click',()=>mostrarFormularioCobro(item));
 
-                const toggle=document.createElement('button');
-                toggle.type='button'; toggle.className='btn-ghost';
-                toggle.textContent=item.estado === 'realizado' ? '↩' : '✓';
-                toggle.title=item.estado === 'realizado' ? 'Volver a pendiente' : 'Marcar como realizado';
-                toggle.addEventListener('click',()=>cambiarEstadoCobro(item));
+                grupo.append(abrir,editar);
 
-                const eliminar=document.createElement('button');
-                eliminar.type='button'; eliminar.className='btn-ghost';
-                eliminar.textContent='×'; eliminar.title='Eliminar cobro';
-                eliminar.addEventListener('click',()=>eliminarCobro(item));
+                if (item.configurado) {
+                    const toggle=document.createElement('button');
+                    toggle.type='button'; toggle.className='btn-ghost';
+                    toggle.textContent=item.estado === 'realizado' ? '↩' : '✓';
+                    toggle.title=item.estado === 'realizado' ? 'Volver a pendiente' : 'Marcar transferencia como realizada';
+                    toggle.addEventListener('click',()=>cambiarEstadoCobro(item));
 
-                grupo.append(editar,toggle,eliminar);
+                    const limpiar=document.createElement('button');
+                    limpiar.type='button'; limpiar.className='btn-ghost';
+                    limpiar.textContent='×'; limpiar.title='Quitar monto manual (conserva la carpeta y sus archivos)';
+                    limpiar.addEventListener('click',()=>limpiarCobro(item));
+
+                    grupo.append(toggle,limpiar);
+                }
+
                 acciones.appendChild(grupo);
-                tr.append(nombre,detalle,ot,tipo,monto,estado,acciones);
+                tr.append(carpeta,detalle,ot,tipo,monto,estado,acciones);
                 frag.appendChild(tr);
             });
 
@@ -2458,7 +2471,7 @@
                 const tr=document.createElement('tr');
                 const td=document.createElement('td');
                 td.colSpan=7;
-                td.textContent='No hay transferencias ni abonos sin factura en esta semana.';
+                td.textContent='Todas las carpetas de esta semana contienen factura.';
                 td.style.color='var(--text-muted)';
                 tr.appendChild(td);
                 tbody.appendChild(tr);
@@ -2471,7 +2484,7 @@
             const semana=semanaSeleccionada;
             try {
                 const r=await fetch('/api/cobros?semana='+encodeURIComponent(semana));
-                const data=await respuestaJson(r,'No se pudieron cargar los cobros.');
+                const data=await respuestaJson(r,'No se pudieron cargar las carpetas sin factura.');
                 if (semana !== semanaSeleccionada) return;
                 renderCobros(data);
             } catch(e) {
@@ -2484,16 +2497,16 @@
         async function guardarCobro(event) {
             event.preventDefault();
             if (!semanaSeleccionada) return;
+
             let monto;
             try { monto=parseMontoCobro(document.getElementById('cobroMonto').value); }
             catch(e) { alert(e.message); return; }
 
             const payload={
                 semana:semanaSeleccionada,
-                id:document.getElementById('cobroId').value || undefined,
-                nombre:document.getElementById('cobroNombre').value.trim(),
+                carpeta_actual:document.getElementById('cobroCarpetaActual').value || undefined,
+                carpeta:document.getElementById('cobroCarpeta').value.trim(),
                 detalle:document.getElementById('cobroDetalle').value.trim(),
-                ot:document.getElementById('cobroOT').value.trim(),
                 tipo:document.getElementById('cobroTipo').value,
                 monto
             };
@@ -2504,9 +2517,12 @@
                     headers:{'Content-Type':'application/json'},
                     body:JSON.stringify(payload)
                 });
-                const data=await respuestaJson(r,'No se pudo guardar el cobro.');
+                const data=await respuestaJson(r,'No se pudo guardar el monto manual.');
                 cerrarFormularioCobro();
                 renderCobros(data);
+                const activa=document.querySelector('.week-item.active');
+                if (semanaSeleccionada) cargarFacturas(semanaSeleccionada, activa);
+                initSemanas(true);
             } catch(e) { alert(e.message); }
         }
 
@@ -2516,22 +2532,22 @@
                 const r=await fetch('/api/cobros/estado',{
                     method:'POST',
                     headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({semana:semanaSeleccionada,id:item.id,estado:siguiente})
+                    body:JSON.stringify({semana:semanaSeleccionada,carpeta:item.carpeta,estado:siguiente})
                 });
                 const data=await respuestaJson(r,'No se pudo actualizar el cobro.');
                 renderCobros(data);
             } catch(e) { alert(e.message); }
         }
 
-        async function eliminarCobro(item) {
-            if (!confirm(`¿Eliminar el cobro de "${item.nombre}" por ${dineroCLP(item.monto)}?`)) return;
+        async function limpiarCobro(item) {
+            if (!confirm(`¿Quitar el monto manual de "${item.carpeta}"?\n\nLa carpeta y sus archivos se conservarán.`)) return;
             try {
-                const r=await fetch('/api/cobros/eliminar',{
+                const r=await fetch('/api/cobros/limpiar',{
                     method:'POST',
                     headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({semana:semanaSeleccionada,id:item.id})
+                    body:JSON.stringify({semana:semanaSeleccionada,carpeta:item.carpeta})
                 });
-                const data=await respuestaJson(r,'No se pudo eliminar el cobro.');
+                const data=await respuestaJson(r,'No se pudo quitar el monto manual.');
                 renderCobros(data);
             } catch(e) { alert(e.message); }
         }
