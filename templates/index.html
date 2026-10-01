@@ -1263,7 +1263,7 @@
 
         async function crearNuevaFactura() {
             const semanaActual = semanaSeleccionada;
-            const nombre = prompt("Nombre de la nueva carpeta de factura:");
+            const nombre = prompt("Nombre de la nueva carpeta:");
             if(!nombre || nombre.trim() === "" || !semanaActual) return;
             const submissionKey = `nueva-factura:${semanaActual}`;
             if (!beginSubmission(submissionKey)) return;
@@ -1275,7 +1275,7 @@
                 if (!res.ok) throw new Error();
                 cargarFacturas(semanaActual, document.querySelector('.week-item.active'));
             } catch (error) {
-                alert("No se pudo crear la carpeta de factura. Inténtalo de nuevo.");
+                alert("No se pudo crear la carpeta. Inténtalo de nuevo.");
             } finally {
                 endSubmission(submissionKey);
             }
