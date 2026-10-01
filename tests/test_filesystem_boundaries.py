@@ -116,6 +116,28 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertEqual(response.get_json(), {"status": "ok"})
         self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT2")
 
+    def test_open_folder_shortcuts_only_use_approved_shared_paths(self):
+        week = self.factura.parent
+        with patch.object(servidor, "_abrir_directorio_local") as abrir:
+            root = self.client.post("/api/abrir_carpeta", json={"tipo": "facturas"})
+            weekly = self.client.post("/api/abrir_carpeta", json={"tipo": "semana", "semana": week.name})
+            invoice = self.client.post("/api/abrir_carpeta", json={"tipo": "factura", "ruta": str(self.factura)})
+            ot = self.client.post("/api/abrir_carpeta", json={"tipo": "ot", "ot": "OT1"})
+
+        self.assertEqual(root.status_code, 200)
+        self.assertEqual(weekly.status_code, 200)
+        self.assertEqual(invoice.status_code, 200)
+        self.assertEqual(ot.status_code, 200)
+
+        opened = [os.path.normcase(os.path.realpath(call.args[0])) for call in abrir.call_args_list]
+        self.assertIn(os.path.normcase(os.path.realpath(self.facturas)), opened)
+        self.assertIn(os.path.normcase(os.path.realpath(week)), opened)
+        self.assertIn(os.path.normcase(os.path.realpath(self.factura)), opened)
+        self.assertIn(os.path.normcase(os.path.realpath(self.obras / "OT1 obra")), opened)
+
+        outside = self.client.post("/api/abrir_carpeta", json={"tipo": "factura", "ruta": str(self.outside)})
+        self.assertEqual(outside.status_code, 400)
+
     def test_delete_rejects_the_invoice_root_without_removing_it(self):
         response = self.client.post("/api/eliminar_factura", json={"ruta": str(self.facturas)})
         self.assert_rejected(response)
