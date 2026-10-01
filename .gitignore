@@ -21,3 +21,10 @@ diagnostico_sync.py
 patch/
 SincronizadorWeb_Montos.zip
 *.zip
+
+# Build portable local
+.build-venv/
+build/
+dist/
+*.spec
+config.json
