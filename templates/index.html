@@ -2067,6 +2067,7 @@
             if (!beginSubmission(submissionKey)) return;
             const payloadBatch = [];
             facturasActuales.forEach((fact, index) => {
+                if (fact.ignorado) return;
                 const contenido = document.getElementById(`ot_${index}`).value;
                 const badge = document.getElementById(`status_${index}`).textContent;
                 if(contenido.trim() !== "" && !badge.includes("✓ Sincronizado")) {
