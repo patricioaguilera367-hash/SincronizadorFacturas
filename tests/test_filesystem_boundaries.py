@@ -86,6 +86,14 @@ class FilesystemBoundaryTests(unittest.TestCase):
 
         self.assert_rejected(self.client.post("/api/guardar", json={"ruta": str(link), "contenido": "cambio"}))
         self.assertFalse((self.outside / ".OT.txt").exists())
+    def test_hidden_ot_can_be_written_repeatedly(self):
+        first = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": "OT-A"})
+        second = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": "OT-B"})
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT-B")
+
     def test_legacy_ot_is_read_and_migrated_on_next_write(self):
         nuevo = self.factura / ".OT.txt"
         viejo = self.factura / "OT.txt"
