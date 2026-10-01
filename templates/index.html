@@ -1558,7 +1558,8 @@
                 sync.className = 'btn-primary';
                 sync.title = 'Sincronizar carpeta de factura';
                 sync.disabled = fact.ignorado;
-                sync.textContent = '🔄 Sincronizar';
+                sync.textContent = '🔄';
+                sync.setAttribute('aria-label', 'Sincronizar carpeta de factura');
                 sync.addEventListener('click', () => sincronizarIndividual(index));
                 const ignore = document.createElement('button');
                 ignore.type = 'button';
@@ -1896,7 +1897,9 @@
 
             let totalValido = total - ignoradas;
             let pct = totalValido <= 0 ? 0 : Math.round((sincronizadas / totalValido) * 100);
-            let textoTotal = ignoradas > 0 ? `${total} <span style="font-size: var(--type-meta); color: var(--text-muted);">(-${ignoradas})</span>` : total;
+            let textoTotal = ignoradas > 0
+                ? `${total} <span style="font-size:.58rem;color:var(--text-muted);font-weight:500;">· ${ignoradas} ignorada${ignoradas === 1 ? '' : 's'}</span>`
+                : total;
             
             document.getElementById('statTotal').innerHTML = textoTotal;
             document.getElementById('statSinOT').innerText = sinOT;
