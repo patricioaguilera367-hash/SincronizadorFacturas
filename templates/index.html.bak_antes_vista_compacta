@@ -331,16 +331,11 @@
         .montos-total strong { display: block; font-size: clamp(1.15rem,2vw,1.75rem); font-variant-numeric: tabular-nums; }
         .montos-total small { color: var(--text-muted); }
         .montos-scroll { padding: 0 20px 16px; overflow: auto; }
-        .montos-table { min-width: 980px; font-variant-numeric: tabular-nums; }
+        .montos-table { min-width: 800px; font-variant-numeric: tabular-nums; }
         .montos-table th { position: sticky; top: 0; }
         .montos-table td { padding: 10px 12px; }
-        .montos-table .col-numero { width: 72px; white-space: nowrap; }
-        .montos-table .col-nombre { min-width: 210px; }
-        .montos-table .col-ubicacion { min-width: 220px; }
-        .montos-table .col-ot { min-width: 170px; }
-        .montos-table .monto-num { text-align: right; white-space: nowrap; }
-        .montos-table.ocultar-ot .col-ot { display: none; }
-        #montosToggleOT[aria-pressed="false"] { opacity: .78; }
+        .montos-table td:nth-child(n+3):nth-child(-n+5) { text-align: right; }
+        .montos-table th:nth-child(n+3):nth-child(-n+5) { text-align: right; }
         .montos-error { color: var(--status-warning-text); font-size: .8rem; display: block; }
         .montos-actions { display: flex; flex-wrap: wrap; gap: 5px; }
         #montosMensaje { color: var(--text-muted); padding: 4px 25px 14px; }
@@ -444,14 +439,13 @@
                 <p id="montosMensaje" role="status" aria-live="polite"></p>
                 <div class="montos-scroll">
                     <table class="montos-table">
-                        <thead><tr><th class="col-numero">N°</th><th class="col-nombre">Nombre</th><th class="col-ubicacion">Ubicación</th><th class="col-ot">OT</th><th>Neto</th><th>IVA</th><th>Total</th><th>Estado / acciones</th></tr></thead>
+                        <thead><tr><th>Carpeta / factura</th><th>OT</th><th>Neto</th><th>IVA</th><th>Total</th><th>Estado / acciones</th></tr></thead>
                         <tbody id="montosFilas"></tbody>
                     </table>
                 </div>
             </div>
             <div class="modal-footer">
                 <span style="margin-right:auto;color:var(--text-muted);font-size:var(--type-meta)">Los pendientes NO se suman. Las carpetas ignoradas se excluyen.</span>
-                <button type="button" class="btn-outline" id="montosToggleOT" onclick="toggleColumnaOT()" aria-pressed="false">Mostrar OT</button>
                 <button type="button" class="btn-outline" id="montosRefrescar" onclick="refrescarTodosMontos()">↻ Actualizar</button>
                 <button type="button" class="btn-master" onclick="cerrarModalMontos()">Cerrar</button>
             </div>
@@ -1606,48 +1600,10 @@
         // Módulo aislado de la interfaz: importe facturas. No toca el flujo de sync OT.
         const dineroCLP = n => '$ ' + Number(n).toLocaleString('es-CL', {maximumFractionDigits:0});
         let montosEnCarga = false;
-        const MONTOS_OT_KEY = 'sincronizador_montos_mostrar_ot';
-
-        function extraerDatosVisualesFactura(item) {
-            const fuente = String(item.archivo || item.carpeta || '').replace(/\.[^.]+$/, '').trim();
-            const m = fuente.match(/^F\s*N\s*[°º]\s*([0-9]+(?:\s*[-–]\s*[0-9]+)?)\s*(.*)$/i);
-            const numero = m ? m[1].replace(/\s+/g, '') : (item.numero || '—');
-            let resto = m ? m[2].trim() : '';
-
-            // Si el archivo sólo trae el número, usar el nombre de la carpeta como respaldo.
-            if (!resto && item.carpeta) {
-                const carpeta = String(item.carpeta).trim();
-                const mc = carpeta.match(/^F\s*N\s*[°º]\s*[0-9]+(?:\s*[-–]\s*[0-9]+)?\s*(.*)$/i);
-                resto = mc ? mc[1].trim() : carpeta;
-            }
-
-            const partes = resto.split(',').map(v => v.trim()).filter(Boolean);
-            const nombre = partes.length ? partes.shift() : '—';
-            const ubicacion = partes.length ? partes.join(', ') : '—';
-            return { numero, nombre, ubicacion };
-        }
-
-        function aplicarVisibilidadOT() {
-            const tabla = document.querySelector('#modalMontos .montos-table');
-            const boton = document.getElementById('montosToggleOT');
-            if (!tabla || !boton) return;
-            const mostrar = localStorage.getItem(MONTOS_OT_KEY) === '1';
-            tabla.classList.toggle('ocultar-ot', !mostrar);
-            boton.textContent = mostrar ? 'Ocultar OT' : 'Mostrar OT';
-            boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
-        }
-
-        function toggleColumnaOT() {
-            const mostrarAhora = localStorage.getItem(MONTOS_OT_KEY) === '1';
-            localStorage.setItem(MONTOS_OT_KEY, mostrarAhora ? '0' : '1');
-            aplicarVisibilidadOT();
-        }
-
         function cerrarModalMontos() { document.getElementById('modalMontos').style.display='none'; }
         async function abrirModalMontos() {
             if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
             document.getElementById('modalMontos').style.display='flex';
-            aplicarVisibilidadOT();
             await cargarMontos();
         }
         async function cargarMontos() {
@@ -1669,15 +1625,11 @@
                     const tr=document.createElement('tr');
                     const celda=(valor)=>{const td=document.createElement('td');td.textContent=valor;return td;};
                     const n=item.montos;
-                    const datosVisuales=extraerDatosVisualesFactura(item);
-                    const numero=celda(datosVisuales.numero); numero.className='col-numero'; numero.title=item.archivo || '';
-                    const nombre=celda(datosVisuales.nombre); nombre.className='col-nombre'; nombre.title=item.archivo || '';
-                    const ubicacion=celda(datosVisuales.ubicacion); ubicacion.className='col-ubicacion'; ubicacion.title=item.carpeta || '';
-                    const ot=celda(item.ot || '—'); ot.className='col-ot';
-                    const neto=celda(n && item.estado !== 'duplicado' ? dineroCLP(n.neto) : '—'); neto.className='monto-num';
-                    const iva=celda(n && item.estado !== 'duplicado' ? dineroCLP(n.iva) : '—'); iva.className='monto-num';
-                    const total=celda(n && item.estado !== 'duplicado' ? dineroCLP(n.total) : '—'); total.className='monto-num';
-                    tr.append(numero, nombre, ubicacion, ot, neto, iva, total);
+                    const nombre=celda(item.carpeta+' / '+item.archivo);
+                    nombre.title=item.archivo;
+                    tr.append(nombre, celda(item.ot || '—'), celda(n && item.estado !== 'duplicado' ? dineroCLP(n.neto) : '—'),
+                        celda(n && item.estado !== 'duplicado' ? dineroCLP(n.iva) : '—'),
+                        celda(n && item.estado !== 'duplicado' ? dineroCLP(n.total) : '—'));
                     const estado=document.createElement('td');
                     const textos={manual:'Manual',extraido:'Extraído',manual_pendiente:'Pendiente',duplicado:'Duplicado'};
                     const titulo=document.createElement('span'); titulo.textContent=textos[item.estado]||'Pendiente';
@@ -1692,7 +1644,7 @@
                 }
                 tbody.replaceChildren(frag);
                 if (!data.filas.length) {
-                    const fila=document.createElement('tr');const td=document.createElement('td');td.colSpan=8;td.textContent='No hay archivos cuyo nombre comience por F N° y sean PDF o imagen.';fila.appendChild(td);tbody.appendChild(fila);
+                    const fila=document.createElement('tr');const td=document.createElement('td');td.colSpan=6;td.textContent='No hay archivos cuyo nombre comience por F N° y sean PDF o imagen.';fila.appendChild(td);tbody.appendChild(fila);
                 }
                 mensaje.textContent=`${data.filas.length} documento(s). ${data.pendientes} pendiente(s) excluido(s) del total.`;
             } catch(e) { mensaje.textContent='Error: '+e.message; }
