@@ -13,6 +13,7 @@ set "PYTHON="
 
 if exist "%~dp0.build-venv\Scripts\python.exe" set "PYTHON=%~dp0.build-venv\Scripts\python.exe"
 if not defined PYTHON if exist "%~dp0.venv\Scripts\python.exe" set "PYTHON=%~dp0.venv\Scripts\python.exe"
+if not defined PYTHON if exist "%LocalAppData%\Python\pythoncore-3.14-64\python.exe" set "PYTHON=%LocalAppData%\Python\pythoncore-3.14-64\python.exe"
 
 if not defined PYTHON (
     where py >nul 2>&1
