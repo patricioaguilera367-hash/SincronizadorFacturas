@@ -832,13 +832,15 @@
             </div>
             
             <div class="header-actions">
+                <button class="utility-icon-btn btn-outline" type="button" onclick="abrirCarpeta('facturas')" aria-label="Abrir carpeta general de facturas" title="Abrir carpeta general de facturas">🗂️</button>
                 <button class="dark-mode-toggle" id="darkModeBtn" onclick="toggleDarkMode()" aria-label="Activar modo oscuro" title="Activar modo oscuro">🌙</button>
-                <div id="botonesAccion" style="display: none; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn-outline" onclick="crearNuevaFactura()" title="Crea una carpeta de factura vacía">➕ Agregar carpeta de factura</button>
-                    <button class="btn-outline btn-monto" onclick="abrirModalMontos()" aria-label="Resumen de montos" title="Resumen de montos de facturas">$</button>
-                    <button class="btn-outline" onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Editar en planilla</button>
-                    <button class="btn-outline" onclick="copiarTablaExcel()" id="btnCopiar" title="Copia la tabla actual al portapapeles">📋 Copiar tabla</button>
-                    <button class="btn-master" onclick="sincronizarTodaLaSemana()" id="btnMaster">🚀 Sincronizar semana</button>
+                <div id="botonesAccion" style="display: none; gap: 6px; flex-wrap: nowrap;">
+                    <button class="utility-icon-btn btn-outline" type="button" onclick="abrirCarpeta('semana')" aria-label="Abrir carpeta de la semana" title="Abrir carpeta de la semana">📂</button>
+                    <button class="btn-outline" onclick="crearNuevaFactura()" title="Crea una carpeta de factura vacía">➕ Nueva carpeta</button>
+                    <button class="btn-outline btn-monto" onclick="abrirModalMontos()" aria-label="Resumen de montos y cobros" title="Resumen de facturas y cobros">$</button>
+                    <button class="btn-outline" onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Planilla</button>
+                    <button class="btn-outline" onclick="copiarTablaExcel()" id="btnCopiar" title="Copia la tabla actual al portapapeles">📋 Copiar</button>
+                    <button class="btn-master" onclick="sincronizarTodaLaSemana()" id="btnMaster">🚀 Sincronizar</button>
                 </div>
             </div>
         </div>
@@ -891,7 +893,7 @@
     <div class="modal-overlay" id="modalMontos" role="dialog" aria-modal="true" aria-labelledby="tituloMontos" tabindex="-1">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="tituloMontos">$ Resumen de facturas</h2>
+                <h2 id="tituloMontos">$ Facturas y cobros</h2>
                 <button type="button" class="btn-ghost" onclick="cerrarModalMontos()" aria-label="Cerrar">✖</button>
             </div>
             <div class="modal-body">
@@ -899,7 +901,7 @@
                     <button type="button" class="montos-density-toggle" id="montosDensidad" onclick="toggleDensidadMontos()" title="Alternar vista compacta de totales" aria-label="Alternar vista compacta de totales">▤</button>
                     <div class="montos-total"><small>NETO</small><strong id="montosNeto">—</strong></div>
                     <div class="montos-total"><small>IVA</small><strong id="montosIva">—</strong></div>
-                    <div class="montos-total"><small>TOTAL GLOBAL</small><strong id="montosTotal">—</strong></div>
+                    <div class="montos-total"><small>TOTAL A COBRAR</small><strong id="montosTotal">—</strong><small class="montos-desglose" id="montosDesglose">Facturas — · Cobros —</small></div>
                 </div>
                 <p id="montosMensaje" role="status" aria-live="polite"></p>
                 <div class="montos-scroll">
@@ -908,9 +910,40 @@
                         <tbody id="montosFilas"></tbody>
                     </table>
                 </div>
+
+                <section class="cobros-panel" aria-labelledby="tituloCobros">
+                    <div class="cobros-head">
+                        <div class="cobros-head-copy">
+                            <strong id="tituloCobros">Transferencias / abonos sin factura</strong>
+                            <small id="cobrosResumen">Sin cobros cargados</small>
+                        </div>
+                        <button type="button" class="btn-outline" id="btnNuevoCobro" onclick="mostrarFormularioCobro()">＋ Agregar cobro</button>
+                    </div>
+                    <form class="cobros-form" id="cobrosForm" onsubmit="guardarCobro(event)">
+                        <input type="hidden" id="cobroId">
+                        <input id="cobroNombre" maxlength="120" required placeholder="Persona / proveedor" aria-label="Persona o proveedor">
+                        <input id="cobroDetalle" maxlength="180" placeholder="Concepto / detalle" aria-label="Concepto o detalle">
+                        <input id="cobroOT" maxlength="80" placeholder="OT opcional" aria-label="OT opcional">
+                        <select id="cobroTipo" aria-label="Tipo de cobro">
+                            <option value="transferencia">Transferencia</option>
+                            <option value="abono">Abono</option>
+                        </select>
+                        <input id="cobroMonto" inputmode="numeric" required placeholder="Monto CLP" aria-label="Monto en pesos chilenos">
+                        <div class="cobros-form-actions">
+                            <button type="submit" class="btn-master">Guardar</button>
+                            <button type="button" class="btn-ghost" onclick="cerrarFormularioCobro()">Cancelar</button>
+                        </div>
+                    </form>
+                    <div class="cobros-scroll">
+                        <table class="cobros-table">
+                            <thead><tr><th style="width:18%">Persona / proveedor</th><th style="width:25%">Concepto</th><th style="width:12%">OT</th><th style="width:12%">Tipo</th><th style="width:14%;text-align:right">Monto</th><th style="width:11%">Estado</th><th style="width:8%" aria-label="Acciones"></th></tr></thead>
+                            <tbody id="cobrosFilas"></tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
             <div class="modal-footer">
-                <span id="montosNota">Los pendientes no se suman.</span>
+                <span id="montosNota">Facturas pendientes sin monto y cobros realizados no se suman al total por cobrar.</span>
                 <button type="button" class="btn-outline" id="montosToggleOT" onclick="toggleColumnaOT()" aria-pressed="false">Mostrar OT</button>
                 <button type="button" class="btn-outline" id="montosRefrescar" onclick="refrescarTodosMontos()">↻ Actualizar</button>
                 <button type="button" class="btn-master" onclick="cerrarModalMontos()">Cerrar</button>
