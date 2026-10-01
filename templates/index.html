@@ -1041,6 +1041,8 @@
         let weekRequestToken = 0;
         let folderRequestToken = 0;
         let weeksRequestToken = 0;
+        let revisionEnCarga = false;
+        let revisionActual = {items: [], total: 0, danger: 0, warning: 0};
         const submissionsInFlight = new Set();
 
         function beginSubmission(key) {
@@ -1071,6 +1073,110 @@
             catch (error) { throw new Error(fallback); }
             if (!res.ok) throw new Error(data.error || data.mensaje || fallback);
             return data;
+        }
+
+        function actualizarBotonRevision(data) {
+            const btn=document.getElementById('btnRevision');
+            if (!btn) return;
+            const total=Number(data?.total || 0);
+            btn.classList.toggle('has-items', total > 0);
+            btn.textContent=total > 0 ? `⚠ ${total}` : '✓ Revisión';
+            btn.title=total > 0
+                ? `${total} situación(es) requieren revisión`
+                : 'No se detectaron situaciones fuera de patrón';
+        }
+
+        function renderRevision(data) {
+            revisionActual=data || {items:[],total:0,danger:0,warning:0};
+            actualizarBotonRevision(revisionActual);
+            const resumen=document.getElementById('revisionResumen');
+            const lista=document.getElementById('revisionLista');
+            if (!resumen || !lista) return;
+
+            const total=Number(revisionActual.total || 0);
+            if (!total) {
+                resumen.textContent='No se detectaron situaciones fuera de patrón en esta semana.';
+                const ok=document.createElement('div');
+                ok.className='week-loading';
+                ok.textContent='✓ Todo lo revisable automáticamente está consistente.';
+                lista.replaceChildren(ok);
+                return;
+            }
+
+            resumen.textContent=`${total} revisión(es) · ${revisionActual.danger || 0} crítica(s) · ${revisionActual.warning || 0} advertencia(s)`;
+            const frag=document.createDocumentFragment();
+            (revisionActual.items || []).forEach(item=>{
+                const row=document.createElement('div');
+                row.className='review-item';
+
+                const dot=document.createElement('span');
+                dot.className='review-dot review-dot-'+(item.severidad || 'info');
+
+                const folder=document.createElement('div');
+                folder.className='review-folder';
+                folder.textContent=item.carpeta || 'Carpeta';
+
+                const copy=document.createElement('div');
+                copy.className='review-copy';
+                const msg=document.createElement('div');
+                msg.className='review-message';
+                msg.textContent=item.mensaje || 'Requiere revisión.';
+                const sug=document.createElement('div');
+                sug.className='review-suggestion';
+                sug.textContent=item.sugerencia || 'Revisar manualmente.';
+                copy.append(msg,sug);
+
+                const open=document.createElement('button');
+                open.type='button';
+                open.className='btn-ghost review-open';
+                open.textContent='📂';
+                open.title='Abrir carpeta';
+                open.setAttribute('aria-label','Abrir '+(item.carpeta || 'carpeta'));
+                open.addEventListener('click',()=>abrirCarpeta('factura',{ruta:item.ruta}));
+
+                row.append(dot,folder,copy,open);
+                frag.appendChild(row);
+            });
+            lista.replaceChildren(frag);
+        }
+
+        async function cargarRevision(forzarRender=false) {
+            if (!semanaSeleccionada || revisionEnCarga) return;
+            revisionEnCarga=true;
+            try {
+                const semana=semanaSeleccionada;
+                const r=await fetch('/api/revision?semana='+encodeURIComponent(semana));
+                const data=await respuestaJson(r,'No se pudo revisar la semana.');
+                if (semana !== semanaSeleccionada) return;
+                revisionActual=data;
+                actualizarBotonRevision(data);
+                const abierto=document.getElementById('modalRevision')?.style.display === 'flex';
+                if (forzarRender || abierto) renderRevision(data);
+            } catch(e) {
+                const btn=document.getElementById('btnRevision');
+                if (btn) {
+                    btn.textContent='⚠ Revisión';
+                    btn.classList.add('has-items');
+                    btn.title=e.message;
+                }
+                if (forzarRender) {
+                    const resumen=document.getElementById('revisionResumen');
+                    if (resumen) resumen.textContent='Error: '+e.message;
+                }
+            } finally {
+                revisionEnCarga=false;
+            }
+        }
+
+        async function abrirModalRevision() {
+            if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
+            document.getElementById('modalRevision').style.display='flex';
+            renderRevision(revisionActual);
+            await cargarRevision(true);
+        }
+
+        function cerrarModalRevision() {
+            document.getElementById('modalRevision').style.display='none';
         }
 
         function crearMensaje(mensaje, retry) {
@@ -1506,6 +1612,7 @@
                 if (facturasActuales.length === 0) {
                     mostrarEstadoTabla('Esta semana no contiene carpetas de factura.');
                     updateStats();
+                    cargarRevision(false);
                     return;
                 }
                 const tbody = document.getElementById("tablaBody");
@@ -1674,6 +1781,7 @@
             tbody.replaceChildren(fragment);
             facturasActuales.forEach((fact, index) => { renderTags(index); });
             updateStats();
+            cargarRevision(false);
             } catch (error) {
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
                 facturasActuales = [];
@@ -2065,6 +2173,7 @@
                 cargarListaArchivos(index, ruta);
                 setStatus(index, 'danger', '⚠ Archivo agregado');
                 initSemanas();
+                cargarRevision(false);
             } catch (error) {
                 alert("No se pudo subir el archivo. Inténtalo de nuevo.");
                 fileList.replaceChildren(...originalNodes);
@@ -2574,6 +2683,7 @@
                 const data=await respuestaJson(r,'No se pudo guardar el monto manual.');
                 cerrarFormularioCobro();
                 renderCobros(data);
+                cargarRevision(false);
                 const activa=document.querySelector('.week-item.active');
                 if (semanaSeleccionada) cargarFacturas(semanaSeleccionada, activa);
                 initSemanas(true);
@@ -2603,6 +2713,7 @@
                 });
                 const data=await respuestaJson(r,'No se pudo quitar el monto manual.');
                 renderCobros(data);
+                cargarRevision(false);
             } catch(e) { alert(e.message); }
         }
 
