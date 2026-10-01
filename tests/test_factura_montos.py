@@ -72,12 +72,12 @@ class MontosTests(unittest.TestCase):
 
     def test_pdf_real_generado_si_hay_pymupdf(self):
         try:
-            import fitz
+            import pymupdf
         except ImportError:
             self.skipTest('PyMuPDF no instalado en el entorno de prueba')
         with tempfile.TemporaryDirectory() as d:
             ruta = os.path.join(d,'F N°999.pdf')
-            doc = fitz.open()
+            doc = pymupdf.open()
             pagina = doc.new_page()
             pagina.insert_text((80, 80), 'MONTO NETO $ 123.529\nI.V.A. 19% $ 23.471\nTOTAL $ 147.000')
             doc.save(ruta)
