@@ -853,7 +853,7 @@
                 <button class="dark-mode-toggle" id="darkModeBtn" onclick="toggleDarkMode()" aria-label="Activar modo oscuro" title="Activar modo oscuro">🌙</button>
                 <div id="botonesAccion" style="display: none; gap: 6px; flex-wrap: nowrap;">
                     <button class="utility-icon-btn btn-outline" type="button" onclick="abrirCarpeta('semana')" aria-label="Abrir carpeta de la semana" title="Abrir carpeta de la semana">📂</button>
-                    <button class="btn-outline" onclick="crearNuevaFactura()" title="Crea una carpeta de factura vacía">➕ Nueva carpeta</button>
+                    <button class="btn-outline" onclick="crearNuevaFactura()" title="Crea una carpeta de trabajo vacía">➕ Nueva carpeta</button>
                     <button class="btn-outline btn-monto" onclick="abrirModalMontos()" aria-label="Resumen de montos y cobros" title="Resumen de facturas y cobros">$</button>
                     <button class="btn-outline" onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Planilla</button>
                     <button class="btn-outline" onclick="copiarTablaExcel()" id="btnCopiar" title="Copia la tabla actual al portapapeles">📋 Copiar</button>
@@ -874,7 +874,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th width="30%">📁 Carpeta de factura</th>
+                        <th width="30%">📁 Carpeta</th>
                         <th width="40%">✍️ Códigos OT</th>
                         <th width="15%">📌 Estado</th>
                         <th width="15%">⚙️ Acciones</th>
@@ -1452,7 +1452,7 @@
 
                 const row = document.createElement('tr');
                 const folderCell = document.createElement('td');
-                folderCell.dataset.label = 'Carpeta de factura';
+                folderCell.dataset.label = 'Carpeta';
                 const folderWrapper = document.createElement('div');
                 folderWrapper.className = 'folder-wrapper';
                 const expander = document.createElement('button');
@@ -1487,15 +1487,15 @@
                 const edit = document.createElement('button');
                 edit.type = 'button';
                 edit.className = 'btn-edit';
-                edit.title = 'Renombrar carpeta de factura';
-                edit.setAttribute('aria-label', 'Renombrar carpeta de factura');
+                edit.title = 'Renombrar carpeta';
+                edit.setAttribute('aria-label', 'Renombrar carpeta');
                 edit.textContent = '✏️';
                 edit.addEventListener('click', () => renombrarCarpeta(index));
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'btn-delete';
-                remove.title = 'Eliminar carpeta de factura y su contenido';
-                remove.setAttribute('aria-label', 'Eliminar carpeta de factura y su contenido');
+                remove.title = 'Eliminar carpeta y su contenido';
+                remove.setAttribute('aria-label', 'Eliminar carpeta y su contenido');
                 remove.textContent = '🗑️';
                 remove.addEventListener('click', () => eliminarCarpeta(index));
                 folderActions.append(openFolder, edit, remove);
@@ -1555,10 +1555,10 @@
                 const sync = document.createElement('button');
                 sync.type = 'button';
                 sync.className = 'btn-primary';
-                sync.title = 'Sincronizar carpeta de factura';
+                sync.title = 'Sincronizar carpeta';
                 sync.disabled = fact.ignorado;
                 sync.textContent = '🔄';
-                sync.setAttribute('aria-label', 'Sincronizar carpeta de factura');
+                sync.setAttribute('aria-label', 'Sincronizar carpeta');
                 sync.addEventListener('click', () => sincronizarIndividual(index));
                 const ignore = document.createElement('button');
                 ignore.type = 'button';
