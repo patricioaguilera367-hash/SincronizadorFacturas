@@ -179,6 +179,44 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertEqual(set(listed.get_json()), {"documento.txt"})
 
 
+    def test_ignore_only_blocks_synchronization(self):
+        ignored = self.client.post("/api/toggle_ignorar", json={"ruta": str(self.factura)})
+        self.assertEqual(ignored.status_code, 200)
+        self.assertTrue((self.factura / "ignorado.txt").exists())
+
+        # Seguimiento y edición siguen activos.
+        listed = self.client.get("/api/facturas", query_string={"semana": "Semana 01"})
+        self.assertEqual(listed.status_code, 200)
+        item = listed.get_json()[0]
+        self.assertTrue(item["ignorado"])
+        self.assertNotEqual(item["badge_class"], "badge-ignored")
+
+        saved = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": "OT2"})
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT2")
+
+        state = self.client.post("/api/actualizar_estado_documento", json={
+            "ruta": str(self.factura), "tipo": "factura", "estado": "recibida"
+        })
+        self.assertEqual(state.status_code, 200)
+        self.assertEqual(state.get_json()["estados"]["factura"], "recibida")
+
+        # Sólo sincronizar queda bloqueado.
+        single = self.client.post("/api/sincronizar", json={
+            "ruta": str(self.factura), "nombre": self.factura.name, "contenido": "OT1"
+        })
+        self.assertEqual(single.status_code, 409)
+        self.assertEqual(single.get_json()["status"], "error")
+        self.assertIn("ignorada", single.get_json()["mensaje"].lower())
+
+    def test_ignore_ui_keeps_editing_controls_enabled(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("ignored-box", template)
+        self.assertNotIn("input.disabled = fact.ignorado", template)
+        self.assertIn("sync.disabled = fact.ignorado", template)
+        self.assertIn("if (fact.ignorado) return;", template)
+        self.assertIn("Ignorar sólo desactiva la sincronización", template)
+
     def test_sync_all_keeps_the_existing_in_root_result_shape(self):
         response = self.client.post("/api/sincronizar_todo", json=[{
             "ruta": str(self.factura),
