@@ -1121,52 +1121,9 @@
         let activeViewTransition = null;
         let viewTransitionRevision = 0;
 
-        function updateWithViewTransition(updateDOM, options = {}) {
-            const revision = ++viewTransitionRevision;
-            const pendingTransition = activeViewTransition;
-            const source = options.source;
-            const target = options.target;
-            const cleanup = () => {
-                if (source) source.style.viewTransitionName = "";
-                if (target) target.style.viewTransitionName = "";
-                if (options.suppressEntry) options.suppressEntry.classList.remove("view-transition-active");
-            };
-            const supportsTransitions = typeof document.startViewTransition === "function";
-            const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-            if (pendingTransition || !supportsTransitions || reducedMotion) {
-                if (pendingTransition && typeof pendingTransition.skipTransition === "function") pendingTransition.skipTransition();
-                cleanup();
-                updateDOM();
-                return false;
-            }
-
-            if (options.name && source && target) source.style.viewTransitionName = options.name;
-            if (options.suppressEntry) options.suppressEntry.classList.add("view-transition-active");
-
-            let transition;
-            try {
-                transition = document.startViewTransition(() => {
-                    if (revision !== viewTransitionRevision) { cleanup(); return; }
-                    updateDOM();
-                    if (options.name && source && target) {
-                        source.style.viewTransitionName = "";
-                        target.style.viewTransitionName = options.name;
-                    }
-                });
-            } catch (error) {
-                cleanup();
-                updateDOM();
-                return false;
-            }
-
-            activeViewTransition = transition;
-            const finish = () => {
-                cleanup();
-                if (activeViewTransition === transition) activeViewTransition = null;
-            };
-            transition.finished.then(finish, finish);
-            return true;
+        function updateWithViewTransition(updateDOM) {
+            updateDOM();
+            return false;
         }
 
         document.addEventListener("DOMContentLoaded", () => { initSemanas(); });
@@ -1236,6 +1193,25 @@
         }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+        async function abrirCarpeta(tipo, extra = {}) {
+            const payload = { tipo, ...extra };
+            if (tipo === 'semana') {
+                if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
+                payload.semana = semanaSeleccionada;
+            }
+            try {
+                const res = await fetch('/api/abrir_carpeta', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await respuestaJson(res, 'No se pudo abrir la carpeta.');
+                return data;
+            } catch (error) {
+                alert(error.message || 'No se pudo abrir la carpeta.');
+            }
+        }
 
         async function crearNuevaSemana() {
             if(!confirm("¿Crear la carpeta de la próxima semana?")) return;
@@ -1357,8 +1333,15 @@
             tagsData[index].forEach(ot => {
                 const visualOT = formatVisualOT(ot);
                 const tag = document.createElement('span');
-                tag.className = 'tag';
+                tag.className = 'tag ctrl-open';
                 tag.textContent = `${visualOT} `;
+                tag.title = 'Ctrl + click para abrir la carpeta de esta OT';
+                tag.addEventListener('click', event => {
+                    if (!(event.ctrlKey || event.metaKey)) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    abrirCarpeta('ot', {ot});
+                });
                 const tagClose = document.createElement('button');
                 tagClose.type = 'button';
                 tagClose.className = 'tag-close';
@@ -1415,7 +1398,7 @@
                     elementoLista.classList.add('active');
                     elementoLista.setAttribute("aria-pressed", "true");
                 }
-                document.getElementById("tituloSemana").textContent = "Semana: " + semana;
+                document.getElementById("tituloSemana").textContent = semana;
                 document.getElementById("botonesAccion").style.display = window.matchMedia('(max-width: 900px)').matches ? "grid" : "flex";
                 document.getElementById("contenedorTabla").style.display = "block";
                 document.getElementById("statsContainer").style.display = window.matchMedia('(max-width: 900px)').matches ? "grid" : "flex";
@@ -1462,6 +1445,17 @@
                 expander.append(folderIcon, document.createTextNode(' '), nombreCarpeta, document.createTextNode(' '), disclosure);
                 expander.addEventListener("click", () => toggleArchivos(index, fact.ruta));
                 const folderActions = document.createElement('div');
+                folderActions.className = 'folder-actions';
+                const openFolder = document.createElement('button');
+                openFolder.type = 'button';
+                openFolder.className = 'btn-open-folder';
+                openFolder.title = 'Abrir carpeta de factura en el Explorador';
+                openFolder.setAttribute('aria-label', 'Abrir carpeta de factura');
+                openFolder.textContent = '📂';
+                openFolder.addEventListener('click', event => {
+                    event.stopPropagation();
+                    abrirCarpeta('factura', {ruta: fact.ruta});
+                });
                 const edit = document.createElement('button');
                 edit.type = 'button';
                 edit.className = 'btn-edit';
@@ -1476,7 +1470,7 @@
                 remove.setAttribute('aria-label', 'Eliminar carpeta de factura y su contenido');
                 remove.textContent = '🗑️';
                 remove.addEventListener('click', () => eliminarCarpeta(index));
-                folderActions.append(edit, remove);
+                folderActions.append(openFolder, edit, remove);
                 folderWrapper.append(expander, folderActions);
                 folderCell.appendChild(folderWrapper);
 
@@ -1620,7 +1614,7 @@
                 btn.innerHTML = "✅ Tabla copiada";
                 btn.classList.add('copy-confirmed');
                 setTimeout(() => {
-                    btn.innerHTML = "📋 Copiar tabla";
+                    btn.innerHTML = "📋 Copiar";
                     btn.classList.remove('copy-confirmed');
                 }, 2000);
             } catch (err) { alert("El navegador no permitió copiar la tabla al portapapeles."); }
@@ -2090,7 +2084,7 @@
                 alert(`No se pudo sincronizar la semana. ${detalle}`);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = "🚀 Sincronizar semana";
+                btn.innerHTML = "🚀 Sincronizar";
                 endSubmission(submissionKey);
                 initSemanas(true);
             }
