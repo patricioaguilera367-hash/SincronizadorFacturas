@@ -201,7 +201,7 @@
         .tag-close { cursor: pointer; font: inherit; font-weight: bold; color: inherit; background: transparent; border: 0; padding: 0; opacity: 0.8; transition: opacity 0.18s ease, color 0.18s ease; }
         .tag-close:hover { opacity: 1; color: var(--action-text); }
         .tag-input { border: none; outline: none; background: transparent; flex-grow: 1; min-width: 120px; font-family: inherit; color: var(--text-main); }
-        .tags-container.ignored-box { opacity: 0.4; pointer-events: none; }
+        .ignore-active { color: var(--status-ignored-text) !important; background: var(--status-ignored-bg) !important; }
 
         .archivos-row { display: none; background: var(--secondary); }
         .archivos-container { padding: 15px 30px; animation: surface-arrive 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -1062,7 +1062,7 @@
             return estadosDocumentos[tipo].includes(estado) ? estado : estadosDocumentos[tipo][0];
         }
 
-        function renderEstadoDocumento(index, tipo, deshabilitado) {
+        function renderEstadoDocumento(index, tipo) {
             const fact = facturasActuales[index];
             const estado = estadoDocumento(fact, tipo);
             const etiqueta = `${nombresDocumentos[tipo]} ${estado}`;
@@ -1073,7 +1073,7 @@
             boton.title = etiqueta;
             boton.setAttribute('aria-label', `${etiqueta}. Selecciona para cambiar el estado`);
             boton.setAttribute('aria-pressed', estado !== 'pendiente');
-            boton.disabled = deshabilitado;
+            boton.disabled = false;
             boton.innerHTML = iconosDocumentos[tipo];
             boton.addEventListener('click', () => ciclarEstadoDocumento(index, tipo));
             return boton;
@@ -1092,7 +1092,6 @@
 
         async function ciclarEstadoDocumento(index, tipo) {
             const fact = facturasActuales[index];
-            if (fact.ignorado) return;
             const opciones = estadosDocumentos[tipo];
             const siguiente = opciones[(opciones.indexOf(estadoDocumento(fact, tipo)) + 1) % opciones.length];
             const boton = document.querySelector(`[data-estado-control="${tipo}-${index}"]`);
@@ -1114,7 +1113,7 @@
                 updateStats();
                 initSemanas();
             } catch (e) { alert(e.message || 'Error de conexión'); }
-            finally { if (boton && !fact.ignorado) boton.disabled = false; }
+            finally { if (boton) boton.disabled = false; }
         }
 
         if(localStorage.getItem('darkMode') === 'true') {
@@ -1505,7 +1504,7 @@
                 const otCell = document.createElement('td');
                 otCell.dataset.label = 'Códigos OT';
                 const tagsContainer = document.createElement('div');
-                tagsContainer.className = `tags-container${fact.ignorado ? ' ignored-box' : ''}`;
+                tagsContainer.className = 'tags-container';
                 tagsContainer.id = `tags_container_${index}`;
                 const tagsList = document.createElement('div');
                 tagsList.id = `tags_list_${index}`;
@@ -1515,7 +1514,7 @@
                 input.id = `ot_input_${index}`;
                 input.className = 'tag-input';
                 input.placeholder = 'Añadir código OT';
-                input.disabled = fact.ignorado;
+                input.disabled = false;
                 input.addEventListener('keydown', event => handleTagInput(event, index));
                 input.addEventListener('paste', event => pegarNormal(event, index));
                 tagsContainer.addEventListener('click', () => input.focus());
@@ -1533,7 +1532,7 @@
                 const statusControls = document.createElement('div');
                 statusControls.className = 'status-controls';
                 statusControls.setAttribute('aria-label', 'Estados de documentos');
-                Object.keys(estadosDocumentos).forEach(tipo => statusControls.appendChild(renderEstadoDocumento(index, tipo, fact.ignorado)));
+                Object.keys(estadosDocumentos).forEach(tipo => statusControls.appendChild(renderEstadoDocumento(index, tipo)));
                 const badge = document.createElement('span');
                 badge.className = `status-badge ${fact.badge_class}`;
                 badge.id = `status_${index}`;
@@ -1564,9 +1563,10 @@
                 ignore.type = 'button';
                 ignore.className = 'btn-ghost';
                 const ignoreLabel = fact.ignorado ? 'Quitar estado ignorado' : 'Marcar como ignorada';
-                ignore.title = ignoreLabel;
+                ignore.title = ignoreLabel + (fact.ignorado ? ' · solo desactiva sincronización' : '');
                 ignore.setAttribute('aria-label', ignoreLabel);
                 ignore.textContent = '🚫';
+                if (fact.ignorado) ignore.classList.add('ignore-active');
                 ignore.addEventListener('click', () => toggleIgnorar(index));
                 actions.append(save, sync, ignore);
                 actionCell.appendChild(actions);
@@ -1622,7 +1622,7 @@
             if (facturasActuales.length === 0) return;
             let maxOts = 0;
             for (let i = 0; i < facturasActuales.length; i++) {
-                if (!facturasActuales[i].ignorado && tagsData[i].length > maxOts) maxOts = tagsData[i].length;
+                if (tagsData[i].length > maxOts) maxOts = tagsData[i].length;
             }
             maxOts = Math.max(maxOts, 2); 
             
@@ -1631,8 +1631,7 @@
             let tsvContent = headers + "\n";
             
             facturasActuales.forEach((f, i) => {
-                if (f.ignorado) return; 
-                let row = f.nombre;
+                                let row = f.nombre;
                 tagsData[i].forEach(ot => { row += "\t" + formatVisualOT(ot); });
                 tsvContent += row + "\n";
             });
@@ -1662,7 +1661,7 @@
                     if (nombreCarpeta.toLowerCase() === 'nombre') continue;
                     let targetIndex = facturasActuales.findIndex(f => f.nombre === nombreCarpeta);
                     
-                    if (targetIndex !== -1 && !facturasActuales[targetIndex].ignorado) {
+                    if (targetIndex !== -1) {
                         let rawOts = celdas.slice(1).join(' ');
                         let extractedOTs = parseOTs(rawOts);
                         if (extractedOTs.length > 0) {
@@ -1685,7 +1684,7 @@
                 for(let i=0; i<filas.length; i++) {
                     if (i === filas.length - 1 && filas[i].trim() === "") break;
                     let rowIndex = startIndex + i;
-                    if (tagsData[rowIndex] !== undefined && !facturasActuales[rowIndex].ignorado) {
+                    if (tagsData[rowIndex] !== undefined) {
                         let extractedOTs = parseOTs(filas[i]);
                         if (extractedOTs.length > 0) {
                             extractedOTs.forEach(ot => {
@@ -1742,7 +1741,7 @@
             ultimoFocoPlanilla = document.activeElement;
             let maxOts = 0;
             for (let i = 0; i < facturasActuales.length; i++) {
-                if (!facturasActuales[i].ignorado && tagsData[i] && tagsData[i].length > maxOts) maxOts = tagsData[i].length;
+                if (tagsData[i] && tagsData[i].length > maxOts) maxOts = tagsData[i].length;
             }
             columnasPlanilla = Math.max(5, maxOts + 1);
             renderizarTablaPlanilla();
@@ -1780,7 +1779,6 @@
 
             const fragment = document.createDocumentFragment();
             facturasActuales.forEach((fact, i) => {
-                if (fact.ignorado) return;
                 const row = document.createElement('tr');
                 row.id = `row_planilla_${i}`;
                 const nombre = document.createElement('td');
@@ -1806,7 +1804,6 @@
             theadRow.appendChild(th);
 
             for (let i = 0; i < facturasActuales.length; i++) {
-                if (facturasActuales[i].ignorado) continue;
                 const row = document.getElementById(`row_planilla_${i}`);
                 if (row) row.appendChild(crearCeldaPlanilla(i, columnasPlanilla));
             }
@@ -1824,9 +1821,6 @@
             for(let r = 0; r < filas.length; r++) {
                 if(filas[r].trim() === "" && r === filas.length - 1) break;
                 
-                while(currentRow < facturasActuales.length && facturasActuales[currentRow].ignorado) {
-                    currentRow++;
-                }
                 if(currentRow >= facturasActuales.length) break;
 
                 let celdas = filas[r].split('\t');
@@ -1857,7 +1851,6 @@
 
         function guardarPlanilla() {
             facturasActuales.forEach((fact, i) => {
-                if (fact.ignorado) return;
                 let nuevasOts = [];
                 for(let c=0; c<columnasPlanilla; c++) {
                     let input = document.getElementById(`cell_${i}_${c}`);
@@ -1879,14 +1872,11 @@
 
         function updateStats() {
             let total = facturasActuales.length;
-            let sinOT = 0; let sincronizadas = 0; let porSincronizar = 0; let ignoradas = 0;
+            let sinOT = 0; let sincronizadas = 0; let porSincronizar = 0;
 
             facturasActuales.forEach((fact, index) => {
                 const badge = document.getElementById(`status_${index}`);
-                
-                if (badge && badge.textContent.includes("🚫 Ignorado")) {
-                    ignoradas++;
-                } else if (tagsData[index] === undefined || tagsData[index].length === 0) {
+                if (tagsData[index] === undefined || tagsData[index].length === 0) {
                     sinOT++;
                 } else {
                     if (badge && badge.textContent.includes("✓ Sincronizado")) sincronizadas++;
@@ -1894,13 +1884,8 @@
                 }
             });
 
-            let totalValido = total - ignoradas;
-            let pct = totalValido <= 0 ? 0 : Math.round((sincronizadas / totalValido) * 100);
-            let textoTotal = ignoradas > 0
-                ? `${total} <span style="font-size:.58rem;color:var(--text-muted);font-weight:500;">· ${ignoradas} ignorada${ignoradas === 1 ? '' : 's'}</span>`
-                : total;
-            
-            document.getElementById('statTotal').innerHTML = textoTotal;
+            let pct = total <= 0 ? 0 : Math.round((sincronizadas / total) * 100);
+            document.getElementById('statTotal').textContent = total;
             document.getElementById('statSinOT').innerText = sinOT;
             document.getElementById('statPorSincronizar').innerText = porSincronizar;
             document.getElementById('statSincronizadas').innerText = sincronizadas;
@@ -2046,6 +2031,10 @@
 
         async function sincronizarIndividual(index) {
             const fact = facturasActuales[index];
+            if (fact.ignorado) {
+                alert('Esta carpeta está ignorada para sincronización. Puedes seguir editando OT, estados y archivos.');
+                return;
+            }
             const contenido = document.getElementById(`ot_${index}`).value;
             if(!contenido.trim()) { alert("Añade al menos un código OT antes de sincronizar."); return; }
             const submissionKey = `sincronizar:${fact.ruta}`;
@@ -2078,7 +2067,6 @@
             if (!beginSubmission(submissionKey)) return;
             const payloadBatch = [];
             facturasActuales.forEach((fact, index) => {
-                if (fact.ignorado) return;
                 const contenido = document.getElementById(`ot_${index}`).value;
                 const badge = document.getElementById(`status_${index}`).textContent;
                 if(contenido.trim() !== "" && !badge.includes("✓ Sincronizado")) {
