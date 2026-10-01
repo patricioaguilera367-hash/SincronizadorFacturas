@@ -601,13 +601,30 @@
             font-size: .78rem;
         }
         .week-list { padding: 6px 12px 12px; }
+        .week-entry { display: flex; align-items: center; gap: 3px; margin-bottom: 4px; }
         .week-item {
+            flex: 1 1 auto;
+            width: auto;
+            min-width: 0;
             padding: 8px 10px;
-            margin-bottom: 4px;
+            margin-bottom: 0;
             border-radius: 9px;
             font-size: .79rem;
             line-height: 1.22;
         }
+        .week-open-folder {
+            flex: 0 0 28px;
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            min-height: 28px;
+            padding: 0;
+            border-radius: 7px;
+            background: transparent;
+            color: var(--desk-muted);
+            opacity: .7;
+        }
+        .week-open-folder:hover { opacity: 1; background: var(--primary-subtle); color: var(--action-text); }
         .status-dot { width: 8px; height: 8px; margin-right: 9px; }
         .main-content {
             padding: 14px 18px;
@@ -827,7 +844,7 @@
                 </button>
                 <div class="header-titles">
                     <h1 id="tituloSemana">Selecciona una semana</h1>
-                    <p>Gestiona carpetas de factura, códigos OT y sincronización.</p>
+                    <p>Facturas · OT · sincronización</p>
                 </div>
             </div>
             
@@ -1161,6 +1178,7 @@
                 const fragment = document.createDocumentFragment();
                 semanas.forEach(semanaObj => {
                     const li = document.createElement("li");
+                    li.className = 'week-entry';
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'week-item';
@@ -1174,7 +1192,17 @@
                     button.append(dot, document.createTextNode(semanaObj.nombre), hidden);
                     actualizarEstadoSemana(button, semanaObj.estado);
                     button.addEventListener('click', () => cargarFacturas(semanaObj.nombre, button));
-                    li.appendChild(button);
+                    const openWeek = document.createElement('button');
+                    openWeek.type = 'button';
+                    openWeek.className = 'week-open-folder';
+                    openWeek.textContent = '📂';
+                    openWeek.title = 'Abrir carpeta de esta semana';
+                    openWeek.setAttribute('aria-label', 'Abrir carpeta de '+semanaObj.nombre);
+                    openWeek.addEventListener('click', event => {
+                        event.stopPropagation();
+                        abrirCarpeta('semana', {semana: semanaObj.nombre});
+                    });
+                    li.append(button, openWeek);
                     fragment.appendChild(li);
                 });
                 ul.replaceChildren(fragment);
@@ -1197,8 +1225,9 @@
         async function abrirCarpeta(tipo, extra = {}) {
             const payload = { tipo, ...extra };
             if (tipo === 'semana') {
-                if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
-                payload.semana = semanaSeleccionada;
+                const semana = extra.semana || semanaSeleccionada;
+                if (!semana) { alert('Selecciona una semana primero.'); return; }
+                payload.semana = semana;
             }
             try {
                 const res = await fetch('/api/abrir_carpeta', {
