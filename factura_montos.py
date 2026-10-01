@@ -1,4 +1,4 @@
-"""Montos y datos resumidos de facturas F N°... para SincronizadorWeb.
+"""Montos y datos resumidos de facturas F N°... para SincronizadorFacturas.
 
 V1.1.1:
 - Extrae Neto / IVA / Total desde PDF con texto.
@@ -685,6 +685,18 @@ def _texto_manual(valor, maximo=100):
     return valor or None
 
 
+def _leer_ot_metadata(carpeta):
+    """Lee .OT.txt y mantiene compatibilidad de solo lectura con OT.txt antiguo."""
+    for nombre in ('.OT.txt', 'OT.txt'):
+        ruta = os.path.join(carpeta, nombre)
+        try:
+            with open(ruta, encoding='utf-8') as entrada:
+                return entrada.read().strip()
+        except OSError:
+            continue
+    return ''
+
+
 def registrar_rutas_montos(app, base_facturas, validar_factura, ruta_aprobada):
     def carpeta_valida(valor):
         aprobada = validar_factura(valor)
@@ -712,12 +724,7 @@ def registrar_rutas_montos(app, base_facturas, validar_factura, ruta_aprobada):
                 # en el flujo de OT. Ignorado sólo afecta sincronización/seguimiento,
                 # nunca el total que se enviará a cobro.
                 resultado = resumen(carpeta)
-                ot = ''
-                try:
-                    with open(os.path.join(carpeta, 'OT.txt'), encoding='utf-8') as entrada:
-                        ot = entrada.read().strip()
-                except OSError:
-                    pass
+                ot = _leer_ot_metadata(carpeta)
                 for doc in resultado['documentos']:
                     filas.append({**doc, 'carpeta': nombre, 'ruta': carpeta, 'ot': ot})
                 for tipo in suma:
