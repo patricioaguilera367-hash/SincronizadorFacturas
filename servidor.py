@@ -153,7 +153,7 @@ def evaluar_estado_sync(ruta_factura, ot_content):
         if estados['actual'] != estados['sincronizado']: return "badge-danger", "⚠ Estado de documento modificado"
         archivos_actuales = {}
         for item in os.listdir(ruta_factura):
-            if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt']: continue
+            if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
             path = ruta_aprobada(ruta_factura, item)
             if path and os.path.isfile(path): archivos_actuales[item] = {'size': os.path.getsize(path), 'mtime': int(os.path.getmtime(path))}
         archivos_sync = state.get('archivos', {})
@@ -174,7 +174,7 @@ def actualizar_estado_sync(ruta_factura, ots):
     estados_actuales = normalizar_estados_documentos(state_anterior)['actual']
     state = {'ots': ots, 'archivos': {}, 'estados': {'actual': estados_actuales, 'sincronizado': estados_actuales}}
     for item in os.listdir(ruta_factura):
-        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt']: continue
+        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
         path = ruta_aprobada(ruta_factura, item)
         if path and os.path.isfile(path): state['archivos'][item] = {'size': os.path.getsize(path), 'mtime': int(os.path.getmtime(path))}
     with open(state_path, 'w', encoding='utf-8') as f: json.dump(state, f, ensure_ascii=False)
@@ -186,7 +186,7 @@ def sincronizar_carpetas_python(origen, destino):
         s_path = ruta_aprobada(origen, item)
         d_path = ruta_aprobada(destino, item)
         if not s_path or not d_path: continue
-        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt']: continue
+        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
         if os.path.isdir(s_path): sincronizar_carpetas_python(s_path, d_path)
         else:
             if os.path.exists(d_path):
@@ -385,7 +385,7 @@ def listar_archivos():
     if os.path.exists(ruta):
         for f in os.listdir(ruta):
             ruta_archivo = ruta_aprobada(ruta, f)
-            if ruta_archivo and os.path.isfile(ruta_archivo) and f not in ['.sync_state.json', 'ignorado.txt']: archivos.append(f)
+            if ruta_archivo and os.path.isfile(ruta_archivo) and f not in ['.sync_state.json', 'ignorado.txt', '.factura_montos.json']: archivos.append(f)
     return jsonify(archivos)
 
 @app.route('/api/upload', methods=['POST'])
@@ -396,7 +396,15 @@ def subir_archivo():
         nombre = file.filename.replace('/', '').replace('\\', '')
         destino = ruta_aprobada(ruta, nombre) if componente_aprobado(nombre) else None
         if not destino: return error_ruta_invalida()
+        if nombre.lower() == '.factura_montos.json':
+            return jsonify({'error': 'Nombre reservado.'}), 400
         file.save(destino)
+        from factura_montos import es_factura, actualizar_archivo_cargado
+        if es_factura(nombre):
+            try:
+                actualizar_archivo_cargado(ruta, destino)
+            except Exception:
+                app.logger.exception('La factura se cargó, pero no se pudo extraer el monto')
         return jsonify({"status": "ok", "archivo": nombre})
     return jsonify({"error": "No se pudo subir el archivo."}), 400
 
@@ -571,5 +579,9 @@ registrar_diagnostico_ot(
     BASE_OBRAS,
     ruta_aprobada
 )
+# Módulo opcional e independiente para importes de facturas.
+from factura_montos import registrar_rutas_montos
+registrar_rutas_montos(app, BASE_FACTURAS, ruta_factura_aprobada, ruta_aprobada)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5001)
