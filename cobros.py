@@ -90,7 +90,8 @@ def _tiene_factura(carpeta):
             for nombre in os.listdir(carpeta)
         )
     except OSError:
-        return False
+        # Si no podemos inspeccionarla, no la tratamos como cobro manual.
+        return True
 
 
 def _leer_ot(carpeta):
@@ -222,6 +223,10 @@ def registrar_rutas_cobros(app, base_facturas, ruta_aprobada):
 
         nombre_nuevo = payload.get('carpeta')
         nombre_actual = payload.get('carpeta_actual')
+        if isinstance(nombre_nuevo, str):
+            nombre_nuevo = nombre_nuevo.strip()
+        if isinstance(nombre_actual, str):
+            nombre_actual = nombre_actual.strip()
         if not _componente(nombre_nuevo):
             return jsonify(error='El nombre de carpeta no es válido.'), 400
 
