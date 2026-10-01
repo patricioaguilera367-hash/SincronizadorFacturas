@@ -1,0 +1,9 @@
+{
+  "servidor": "192.168.99.61",
+  "recurso": "obras",
+  "ruta_facturas": [
+    "Facturas pensiones",
+    "Facturas pensiones"
+  ],
+  "puerto": 5001
+}
