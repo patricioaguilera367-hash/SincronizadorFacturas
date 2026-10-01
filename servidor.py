@@ -511,8 +511,9 @@ def get_facturas():
                 ot_content = leer_ot_metadata(ruta_factura)
                 
                 ignorado = bool(ignorado_path and os.path.exists(ignorado_path))
-                if ignorado: clase_b, texto_b = "badge-ignored", "🚫 Ignorado"
-                else: clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content)
+                # Ignorar sólo excluye la carpeta de acciones de sincronización.
+                # El estado, las etiquetas y el seguimiento siguen funcionando.
+                clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content)
                 try:
                     with open(ruta_aprobada(ruta_factura, '.sync_state.json'), 'r', encoding='utf-8') as file_state:
                         estado_documentos = normalizar_estados_documentos(json.load(file_state))['actual']
