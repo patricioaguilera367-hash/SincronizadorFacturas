@@ -20,7 +20,7 @@ if (-not (Test-Path $Python)) {
     else {
         $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
         if (-not $pythonCmd) {
-            throw "No se encontró Python en este PC de desarrollo."
+            throw "No se encontro Python en este PC de desarrollo."
         }
 
         Write-Host "Creando entorno de build con Python..."
@@ -41,7 +41,7 @@ Write-Host "Instalando dependencias de build..."
 Write-Host "Ejecutando pruebas..."
 & $Python -m unittest discover -s tests -p "test_*.py"
 if ($LASTEXITCODE -ne 0) {
-    throw "Las pruebas fallaron. Se canceló el build."
+    throw "Las pruebas fallaron. Se cancelo el build."
 }
 
 Write-Host "Limpiando build anterior..."
@@ -57,6 +57,7 @@ $ArgsPyInstaller = @(
     "--noconfirm",
     "--clean",
     "--onedir",
+    "--console",
     "--name", "SincronizadorFacturas",
     "--add-data", "templates;templates",
     "--collect-all", "pymupdf",
@@ -65,27 +66,16 @@ $ArgsPyInstaller = @(
 & $Python -m PyInstaller @ArgsPyInstaller
 
 if ($LASTEXITCODE -ne 0) {
-    throw "PyInstaller terminó con error."
+    throw "PyInstaller termino con error."
 }
 
 if (-not (Test-Path $Dist)) {
-    throw "No se generó la carpeta portable esperada."
+    throw "No se genero la carpeta portable esperada."
 }
 
-$configOrigen = Join-Path $Root "config.example.json"
-$configDestino = Join-Path $Dist "config.json"
-Copy-Item $configOrigen $configDestino -Force
-
-$iniciar = @'
-@echo off
-setlocal
-cd /d "%~dp0"
-start "" "SincronizadorFacturas.exe"
-timeout /t 2 /nobreak >nul
-start "" "http://127.0.0.1:5001"
-exit /b 0
-'@
-Set-Content -Path (Join-Path $Dist "INICIAR.bat") -Value $iniciar -Encoding ASCII
+Copy-Item (Join-Path $Root "config.example.json") (Join-Path $Dist "config.json") -Force
+Copy-Item (Join-Path $Root "INICIAR_PORTABLE.bat") (Join-Path $Dist "INICIAR.bat") -Force
+Copy-Item (Join-Path $Root "MOSTRAR_LOGO.bat") (Join-Path $Dist "MOSTRAR_LOGO.bat") -Force
 
 $leerme = @'
 SINCRONIZADORFACTURAS PORTABLE
@@ -93,12 +83,17 @@ SINCRONIZADORFACTURAS PORTABLE
 1. Copie esta carpeta completa al PC de destino.
 2. No instale Python, Flask, PyMuPDF ni Git.
 3. Verifique que el PC pueda acceder a \\192.168.99.61\obras.
-4. Ejecute INICIAR.bat o SincronizadorFacturas.exe.
+4. Ejecute INICIAR.bat.
 5. Si cambia el servidor, edite config.json.
 
-No copie solamente el .exe: la carpeta _internal es parte de la aplicación.
+La ventana de consola queda visible a proposito.
+Cerrar esa ventana detiene el servidor.
+
+No copie solamente el .exe:
+la carpeta _internal es parte de la aplicacion.
 '@
-Set-Content -Path (Join-Path $Dist "LEEME_PORTABLE.txt") -Value $leerme -Encoding UTF8
+
+Set-Content -Path (Join-Path $Dist "LEEME_PORTABLE.txt") -Value $leerme -Encoding ASCII
 
 Write-Host ""
 Write-Host "BUILD COMPLETADO" -ForegroundColor Green
