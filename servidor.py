@@ -440,6 +440,8 @@ def abrir_carpeta():
         ruta = ruta_aprobada(BASE_FACTURAS, semana)
     elif tipo == 'factura':
         ruta = ruta_factura_aprobada(data.get('ruta'))
+        if not ruta:
+            return error_ruta_invalida()
     elif tipo == 'ot':
         ruta = _resolver_carpeta_ot(data.get('ot'))
     else:
