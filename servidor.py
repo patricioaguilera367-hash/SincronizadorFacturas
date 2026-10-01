@@ -64,7 +64,7 @@ def cargar_configuracion():
     if type(puerto) is not int or not (1 <= puerto <= 65535):
         raise RuntimeError('El puerto de config.json debe estar entre 1 y 65535.')
 
-    base_obras = rf"\\\\{servidor}\\{recurso}"
+    base_obras = "\\\\" + servidor + "\\" + recurso
     base_facturas = os.path.join(base_obras, *[parte.strip() for parte in ruta_facturas])
 
     return {
