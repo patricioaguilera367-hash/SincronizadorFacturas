@@ -585,6 +585,225 @@
                 min-height: 30px;
             }
         }
+    
+        /* V1.2 compact-ops: más información visible sin perder jerarquía. */
+        body {
+            grid-template-columns: 236px minmax(0, 1fr);
+        }
+        .sidebar-header { padding: 16px 14px 8px; }
+        .sidebar-title { font-size: 1rem; }
+        .search-box { margin-top: 8px; padding: 7px 10px; font-size: .82rem; }
+        .btn-add-week {
+            margin: 8px 14px 4px;
+            width: calc(100% - 28px);
+            padding: 7px 9px;
+            min-height: 34px;
+            font-size: .78rem;
+        }
+        .week-list { padding: 6px 12px 12px; }
+        .week-item {
+            padding: 8px 10px;
+            margin-bottom: 4px;
+            border-radius: 9px;
+            font-size: .79rem;
+            line-height: 1.22;
+        }
+        .status-dot { width: 8px; height: 8px; margin-right: 9px; }
+        .main-content {
+            padding: 14px 18px;
+            gap: 12px;
+        }
+        .header-card {
+            padding: 12px 16px;
+            border-radius: 15px;
+            grid-template-columns: minmax(250px, .7fr) auto;
+            gap: 10px 16px;
+            align-items: center;
+        }
+        .header-left { gap: 10px; }
+        .menu-icon { padding: 7px; gap: 4px; }
+        .menu-icon div { width: 22px; height: 2px; }
+        .header-titles { min-width: 0; }
+        .header-titles h1 {
+            font-size: clamp(1.08rem, 1.45vw, 1.45rem);
+            line-height: 1.08;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+        .header-titles p {
+            margin-top: 3px;
+            font-size: .68rem;
+            line-height: 1.15;
+        }
+        .header-actions { gap: 6px; }
+        #botonesAccion { gap: 6px !important; flex-wrap: nowrap !important; }
+        .header-card button {
+            min-height: 32px;
+            padding: 6px 9px;
+            border-radius: 9px;
+            font-size: .76rem;
+            white-space: nowrap;
+        }
+        .header-card .dark-mode-toggle,
+        .header-card .utility-icon-btn {
+            width: 32px;
+            min-width: 32px;
+            padding: 0;
+            font-size: .92rem;
+        }
+        .stats-container {
+            padding: 9px 16px 8px;
+            border-radius: 14px;
+            gap: 6px 14px;
+        }
+        .stat-box { padding-inline: 12px; }
+        .stat-label { font-size: .61rem; letter-spacing: .07em; }
+        .stat-value {
+            margin-top: 1px;
+            font-size: clamp(1.05rem, 1.35vw, 1.38rem);
+        }
+        .progress-container { margin-top: 1px; }
+        .progress-bar-bg { height: 5px; }
+        .table-container {
+            padding: 9px 10px 10px;
+            border-radius: 14px;
+        }
+        th { padding: 8px 10px; font-size: .67rem; }
+        td { padding: 7px 10px; }
+        td, .tag-input, .spreadsheet-input { font-size: .79rem; }
+        .folder-name { gap: 5px; padding: 2px 3px; line-height: 1.2; }
+        .folder-actions { display: inline-flex; gap: 1px; flex: 0 0 auto; }
+        .btn-edit, .btn-delete, .btn-open-folder {
+            width: 25px;
+            height: 25px;
+            min-width: 25px;
+            min-height: 25px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .77rem;
+        }
+        .btn-open-folder { background: transparent; color: var(--text-muted); }
+        .btn-open-folder:hover { background: var(--secondary); color: var(--action-text); }
+        .acciones-flex { gap: 4px; flex-wrap: nowrap; }
+        .acciones-flex button {
+            min-height: 28px;
+            padding: 5px 8px;
+            font-size: .72rem;
+            white-space: nowrap;
+        }
+        .status-badge {
+            min-width: 82px;
+            padding: 4px 7px;
+            font-size: .67rem;
+            line-height: 1.15;
+        }
+        .status-control {
+            width: 20px;
+            height: 20px;
+            min-width: 20px;
+            min-height: 20px;
+            border-width: 1px;
+        }
+        .status-control svg { width: 10px; height: 10px; }
+        .tags-container {
+            min-height: 30px;
+            padding: 3px 6px;
+            gap: 4px;
+            border-radius: 7px;
+        }
+        .tag {
+            padding: 2px 7px;
+            gap: 4px;
+            font-size: .69rem;
+            cursor: default;
+        }
+        .tag.ctrl-open { cursor: pointer; }
+        .tag-input { min-width: 92px; }
+        .archivos-container { padding: 8px 10px 10px; }
+        .drop-zone { padding: 10px; }
+
+        /* Cobros sin factura: compacto y compartido por semana. */
+        .cobros-panel {
+            margin: 4px 20px 12px;
+            border: 1px solid var(--border);
+            border-radius: 11px;
+            background: var(--bg-surface);
+            overflow: hidden;
+        }
+        .cobros-head {
+            min-height: 38px;
+            padding: 6px 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: space-between;
+            background: var(--bg-body);
+            border-bottom: 1px solid var(--border);
+        }
+        .cobros-head-copy { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+        .cobros-head strong { font-size: .78rem; }
+        .cobros-head small { color: var(--text-muted); font-size: .64rem; }
+        .cobros-form {
+            display: none;
+            grid-template-columns: minmax(120px,1.2fr) minmax(150px,1.7fr) 120px 110px 130px auto;
+            gap: 6px;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            background: var(--secondary);
+        }
+        .cobros-form.visible { display: grid; }
+        .cobros-form input, .cobros-form select {
+            min-width: 0;
+            height: 30px;
+            box-sizing: border-box;
+            padding: 4px 7px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            background: var(--bg-surface);
+            color: var(--text-main);
+            font: inherit;
+            font-size: .72rem;
+        }
+        .cobros-form-actions { display: inline-flex; gap: 4px; }
+        .cobros-form-actions button, .cobros-head button {
+            min-height: 28px;
+            padding: 4px 8px;
+            font-size: .69rem;
+        }
+        .cobros-scroll { overflow-x: auto; }
+        .cobros-table { width: 100%; min-width: 760px; table-layout: fixed; }
+        .cobros-table th { padding: 6px 8px; font-size: .62rem; background: var(--bg-surface); color: var(--text-muted); }
+        .cobros-table td { padding: 5px 8px; font-size: .72rem; line-height: 1.15; }
+        .cobros-table .cobro-monto { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .cobro-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .67rem;
+            font-weight: 600;
+        }
+        .cobro-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
+        .cobro-status.realizado .cobro-dot { background: var(--success); }
+        .cobro-actions { display: inline-flex; gap: 2px; white-space: nowrap; }
+        .cobro-actions button { width: 25px; height: 25px; min-width: 25px; min-height: 25px; padding: 0; font-size: .72rem; }
+        .montos-desglose { margin-top: 3px; font-size: .60rem !important; line-height: 1.05; }
+        @media (max-width: 1280px) {
+            body { grid-template-columns: 220px minmax(0, 1fr); }
+            .main-content { padding: 12px; }
+            .header-card { grid-template-columns: 1fr; align-items: start; }
+            #botonesAccion { flex-wrap: wrap !important; justify-content: flex-start; }
+            .header-actions { justify-content: flex-start; }
+        }
+        @media (max-width: 900px) {
+            .cobros-form { grid-template-columns: 1fr 1fr; }
+            .cobros-form-actions { grid-column: 1 / -1; }
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            body *, body *::before, body *::after { transition-duration: .12s !important; }
+        }
+
     </style>
 </head>
 <body>
