@@ -963,7 +963,7 @@
                 </table>
             </div>
             <div class="modal-footer">
-                <span style="color: var(--text-muted); font-size: var(--type-meta); margin-right: auto; align-self: center;">💡 Ignorar sólo desactiva la sincronización; la edición y el seguimiento siguen activos.</span>
+                <span style="color: var(--text-muted); font-size: var(--type-meta); margin-right: auto; align-self: center;">💡 Las carpetas ignoradas no aparecen aquí: esta planilla está pensada sólo para ingreso masivo de OT.</span>
                 <button class="btn-outline" onclick="cerrarModalPlanilla()">Cancelar</button>
                 <button class="btn-master" onclick="guardarPlanilla()">Guardar cambios</button>
             </div>
@@ -1976,7 +1976,9 @@
             ultimoFocoPlanilla = document.activeElement;
             let maxOts = 0;
             for (let i = 0; i < facturasActuales.length; i++) {
-                if (tagsData[i] && tagsData[i].length > maxOts) maxOts = tagsData[i].length;
+                if (!facturasActuales[i].ignorado && tagsData[i] && tagsData[i].length > maxOts) {
+                    maxOts = tagsData[i].length;
+                }
             }
             columnasPlanilla = Math.max(5, maxOts + 1);
             renderizarTablaPlanilla();
@@ -2014,6 +2016,7 @@
 
             const fragment = document.createDocumentFragment();
             facturasActuales.forEach((fact, i) => {
+                if (fact.ignorado) return;
                 const row = document.createElement('tr');
                 row.id = `row_planilla_${i}`;
                 const nombre = document.createElement('td');
@@ -2039,6 +2042,7 @@
             theadRow.appendChild(th);
 
             for (let i = 0; i < facturasActuales.length; i++) {
+                if (facturasActuales[i].ignorado) continue;
                 const row = document.getElementById(`row_planilla_${i}`);
                 if (row) row.appendChild(crearCeldaPlanilla(i, columnasPlanilla));
             }
@@ -2056,6 +2060,9 @@
             for(let r = 0; r < filas.length; r++) {
                 if(filas[r].trim() === "" && r === filas.length - 1) break;
                 
+                while(currentRow < facturasActuales.length && facturasActuales[currentRow].ignorado) {
+                    currentRow++;
+                }
                 if(currentRow >= facturasActuales.length) break;
 
                 let celdas = filas[r].split('\t');
@@ -2086,6 +2093,7 @@
 
         function guardarPlanilla() {
             facturasActuales.forEach((fact, i) => {
+                if (fact.ignorado) return;
                 let nuevasOts = [];
                 for(let c=0; c<columnasPlanilla; c++) {
                     let input = document.getElementById(`cell_${i}_${c}`);
