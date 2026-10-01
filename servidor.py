@@ -141,6 +141,63 @@ def obtener_fecha_semana(ultima_fecha=None):
     if viernes in FERIADOS_VIERNES: viernes -= timedelta(days=1)
     return f"{viernes.day:02d}{MESES[viernes.month]}{str(viernes.year)[-2:]}"
 
+# V1.1.1 metadata OT oculta
+OT_METADATA_NOMBRE = '.OT.txt'
+OT_METADATA_LEGACY = 'OT.txt'
+
+
+def _ocultar_archivo_windows(ruta):
+    """Marca un archivo como Hidden en Windows sin romper la app si falla."""
+    if os.name != 'nt' or not ruta or not os.path.exists(ruta):
+        return
+
+    try:
+        import ctypes
+
+        FILE_ATTRIBUTE_HIDDEN = 0x2
+        INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
+
+        kernel32 = ctypes.windll.kernel32
+        atributos = kernel32.GetFileAttributesW(str(ruta))
+
+        if atributos != INVALID_FILE_ATTRIBUTES:
+            kernel32.SetFileAttributesW(
+                str(ruta),
+                atributos | FILE_ATTRIBUTE_HIDDEN
+            )
+    except Exception:
+        pass
+
+
+def ruta_ot_metadata(ruta_factura):
+    """
+    Devuelve la ruta del archivo interno de OT.
+
+    Usa .OT.txt como nombre nuevo y mantiene compatibilidad con OT.txt antiguo.
+    Cuando encuentra OT.txt antiguo intenta migrarlo a .OT.txt.
+    """
+    nueva = ruta_aprobada(ruta_factura, OT_METADATA_NOMBRE)
+    vieja = ruta_aprobada(ruta_factura, OT_METADATA_LEGACY)
+
+    if nueva and os.path.exists(nueva):
+        _ocultar_archivo_windows(nueva)
+        return nueva
+
+    if vieja and os.path.exists(vieja):
+        if nueva:
+            try:
+                os.replace(vieja, nueva)
+                _ocultar_archivo_windows(nueva)
+                return nueva
+            except OSError:
+                # Si Windows no permite renombrar en ese momento,
+                # seguimos usando el archivo antiguo para no perder datos.
+                return vieja
+        return vieja
+
+    return nueva
+
+
 def evaluar_estado_sync(ruta_factura, ot_content):
     if not ot_content.strip(): return "badge-none", "-"
     state_path = ruta_aprobada(ruta_factura, '.sync_state.json')
@@ -222,7 +279,7 @@ def get_semanas():
                     else:
                         for f in carpetas:
                             ruta_factura = ruta_aprobada(ruta_semana, f)
-                            ot_txt = ruta_aprobada(ruta_factura, 'OT.txt')
+                            ot_txt = ruta_ot_metadata(ruta_factura)
                             sync_json = ruta_aprobada(ruta_factura, '.sync_state.json')
                             ignorado_path = ruta_aprobada(ruta_factura, 'ignorado.txt')
                             
@@ -255,7 +312,7 @@ def get_facturas():
         for f in os.listdir(ruta_semana):
             ruta_factura = ruta_aprobada(ruta_semana, f)
             if ruta_factura and os.path.isdir(ruta_factura):
-                ot_txt_path = ruta_aprobada(ruta_factura, "OT.txt")
+                ot_txt_path = ruta_ot_metadata(ruta_factura)
                 ignorado_path = ruta_aprobada(ruta_factura, "ignorado.txt")
                 ot_content = ""
                 if ot_txt_path and os.path.exists(ot_txt_path):
@@ -292,7 +349,7 @@ def actualizar_estado_documento():
         estados['actual'][tipo] = estado
         state['estados'] = estados
         with open(state_path, 'w', encoding='utf-8') as f: json.dump(state, f, ensure_ascii=False)
-        ot_path = ruta_aprobada(ruta, 'OT.txt')
+        ot_path = ruta_ot_metadata(ruta)
         ot_content = ''
         if os.path.exists(ot_path):
             with open(ot_path, 'r', encoding='utf-8') as f: ot_content = f.read().strip()
@@ -424,9 +481,10 @@ def guardar_ot():
         contenido = data.get('contenido')
         if not isinstance(contenido, str): return error_ruta_invalida()
         ruta = ruta_factura_aprobada(data.get('ruta'))
-        ot_path = ruta_aprobada(ruta, "OT.txt") if ruta else None
+        ot_path = ruta_ot_metadata(ruta) if ruta else None
         if not ot_path: return error_ruta_invalida()
         with open(ot_path, 'w', encoding='utf-8') as f: f.write(contenido)
+        _ocultar_archivo_windows(ot_path)
         return jsonify({"status": "ok"})
     except Exception: return jsonify({"error": "No se pudieron guardar los códigos OT."}), 500
 
@@ -495,7 +553,7 @@ def procesar_sincronizacion(data, cache_obras=None):
     origen, factura_nombre = data['ruta'], data['nombre']
     ots = [ot.strip() for ot in data.get('contenido', '').split(',') if ot.strip()]
     try:
-        ot_path = ruta_aprobada(origen, "OT.txt")
+        ot_path = ruta_ot_metadata(origen)
         if not ot_path: return error_ruta_invalida()
         with open(ot_path, 'w', encoding='utf-8') as f: f.write(data['contenido'])
     except Exception:

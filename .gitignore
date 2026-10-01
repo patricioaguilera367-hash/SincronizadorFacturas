@@ -7,3 +7,12 @@ venv/
 !.env.example
 servidor.antes_montos.*.bak
 templates/*.bak
+
+# Backups y scripts temporales de desarrollo
+*.bak
+*.bak_*
+*.bak*
+backup_*/
+instalar_*.py
+fix_*.py
+diagnostico_sync.py

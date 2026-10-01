@@ -322,29 +322,269 @@
             .file-picker { min-height: 44px; }
         }
 
-        /* Montos: encapsulado para no alterar el editor de OT. */
+
+        /* Montos V1.1.1: usa variables del tema; sin texto blanco fijo en modo claro. */
         .btn-monto { padding-inline: 14px; font-weight: 800; }
         .montos-total:last-child strong { font-size: clamp(1.6rem, 3vw, 2.7rem); color: var(--action-text); }
-        #modalMontos .modal-content { max-width: 1250px; }
+        #modalMontos .modal-content { max-width: 1320px; }
         .montos-summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; padding: 20px 25px; }
-        .montos-total { padding: 14px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
-        .montos-total strong { display: block; font-size: clamp(1.15rem,2vw,1.75rem); font-variant-numeric: tabular-nums; }
+        .montos-total { padding: 14px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); color: var(--text-main); }
+        .montos-total strong { display: block; color: var(--text-main); font-size: clamp(1.15rem,2vw,1.75rem); font-variant-numeric: tabular-nums; }
         .montos-total small { color: var(--text-muted); }
         .montos-scroll { padding: 0 20px 16px; overflow: auto; }
-        .montos-table { min-width: 980px; font-variant-numeric: tabular-nums; }
-        .montos-table th { position: sticky; top: 0; }
-        .montos-table td { padding: 10px 12px; }
-        .montos-table .col-numero { width: 72px; white-space: nowrap; }
-        .montos-table .col-nombre { min-width: 210px; }
-        .montos-table .col-ubicacion { min-width: 220px; }
-        .montos-table .col-ot { min-width: 170px; }
+        .montos-table { min-width: 940px; font-variant-numeric: tabular-nums; color: var(--text-main); }
+        .montos-table thead { background: var(--bg-body); }
+        .montos-table th { position: sticky; top: 0; z-index: 2; color: var(--text-main); background: var(--bg-body); border-bottom-color: var(--border); }
+        /* Montos V1.1.1 dense-final */
+        .montos-summary {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            padding: 11px 20px 8px;
+        }
+
+        .montos-total {
+            min-height: 66px;
+            box-sizing: border-box;
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 11px;
+            background: var(--bg-surface);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .montos-total small {
+            color: var(--text-muted);
+            font-size: .70rem;
+            line-height: 1.05;
+            font-weight: 500;
+        }
+
+        .montos-total strong {
+            display: block;
+            margin-top: 4px;
+            color: var(--text-main);
+            font-size: clamp(1.35rem, 1.8vw, 1.7rem);
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .montos-total:last-of-type strong {
+            font-size: clamp(1.65rem, 2.2vw, 2.15rem);
+            color: var(--action-text);
+        }
+
+        .montos-density-toggle {
+            position: absolute;
+            top: 4px;
+            right: 8px;
+            z-index: 4;
+            width: 24px;
+            height: 24px;
+            min-width: 24px;
+            min-height: 24px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            background: var(--bg-body);
+            color: var(--text-muted);
+            font-size: .78rem;
+            line-height: 1;
+            opacity: .78;
+        }
+
+        .montos-density-toggle:hover {
+            opacity: 1;
+            color: var(--action-text);
+            border-color: var(--action-text);
+        }
+
+        #modalMontos.montos-resumen-compacto .montos-summary {
+            gap: 4px;
+            padding: 5px 38px 4px 20px;
+        }
+
+        #modalMontos.montos-resumen-compacto .montos-total {
+            min-height: 36px;
+            padding: 4px 9px;
+            border-radius: 7px;
+            flex-direction: row;
+            align-items: baseline;
+            justify-content: flex-start;
+            gap: 7px;
+        }
+
+        #modalMontos.montos-resumen-compacto .montos-total small {
+            font-size: .60rem;
+            white-space: nowrap;
+        }
+
+        #modalMontos.montos-resumen-compacto .montos-total strong,
+        #modalMontos.montos-resumen-compacto .montos-total:last-of-type strong {
+            margin-top: 0;
+            font-size: .98rem;
+            white-space: nowrap;
+        }
+
+        #modalMontos.montos-resumen-compacto .montos-total:last-of-type strong {
+            font-size: 1.08rem;
+        }
+
+        #montosMensaje {
+            margin: 0;
+            padding: 0 22px 4px;
+            min-height: .72rem;
+            color: var(--text-muted);
+            font-size: .64rem;
+            line-height: 1.05;
+            text-align: right;
+            opacity: .76;
+        }
+
+        .montos-scroll {
+            padding: 0 20px 10px;
+            overflow: auto;
+        }
+
+        .montos-table {
+            min-width: 860px;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-main);
+        }
+
+        .montos-table thead { background: var(--bg-body); }
+
+        .montos-table th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            padding: 8px 10px;
+            color: var(--text-main);
+            background: var(--bg-body);
+            border-bottom-color: var(--border);
+            line-height: 1.05;
+        }
+
+        .montos-table td {
+            padding: 4px 10px;
+            color: var(--text-main);
+            line-height: 1.12;
+        }
+
+        .montos-table .col-numero { width: 54px; white-space: nowrap; }
+        .montos-table .col-emisor { min-width: 205px; max-width: 280px; }
+        .montos-table .col-comuna { min-width: 120px; }
+        .montos-table .col-ot { min-width: 150px; }
         .montos-table .monto-num { text-align: right; white-space: nowrap; }
         .montos-table.ocultar-ot .col-ot { display: none; }
         #montosToggleOT[aria-pressed="false"] { opacity: .78; }
-        .montos-error { color: var(--status-warning-text); font-size: .8rem; display: block; }
-        .montos-actions { display: flex; flex-wrap: wrap; gap: 5px; }
-        #montosMensaje { color: var(--text-muted); padding: 4px 25px 14px; }
-        @media(max-width:650px) { .montos-summary { grid-template-columns: 1fr; } }
+
+        .montos-emisor-main { line-height: 1.1; }
+
+        .montos-referencia {
+            display: block;
+            margin-top: 2px;
+            max-width: 255px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-muted);
+            font-size: .66rem;
+            font-weight: 400;
+            line-height: 1.05;
+            letter-spacing: .004em;
+        }
+
+        .montos-actions-col,
+        .montos-status-cell {
+            width: 82px;
+            min-width: 82px;
+            padding-left: 5px !important;
+            padding-right: 5px !important;
+            white-space: nowrap;
+        }
+
+        .montos-status-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .montos-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex: 0 0 8px;
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, .10);
+        }
+
+        .montos-dot-ok { background: var(--success); }
+        .montos-dot-manual { background: var(--action-text); }
+        .montos-dot-warning { background: var(--warning); }
+        .montos-dot-danger { background: var(--danger); }
+        .montos-dot-neutral { background: var(--text-muted); }
+
+        .montos-actions {
+            display: inline-flex;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 0;
+        }
+
+        .montos-icon-btn {
+            width: 23px;
+            height: 23px;
+            min-width: 23px;
+            min-height: 23px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: .76rem;
+            line-height: 1;
+        }
+
+        .montos-error {
+            color: var(--status-warning-text);
+            font-size: .66rem;
+            line-height: 1.15;
+            display: block;
+            margin-top: 3px;
+            white-space: normal;
+            max-width: 190px;
+        }
+
+        #modalMontos .modal-footer {
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+
+        #montosNota {
+            margin-right: auto;
+            color: var(--text-muted);
+            font-size: .68rem;
+            line-height: 1.1;
+        }
+
+        @media(max-width:650px) {
+            .montos-summary { grid-template-columns: 1fr; }
+            #modalMontos.montos-resumen-compacto .montos-summary {
+                grid-template-columns: 1fr;
+                padding-right: 38px;
+            }
+            #modalMontos.montos-resumen-compacto .montos-total {
+                min-height: 30px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -437,6 +677,7 @@
             </div>
             <div class="modal-body">
                 <div class="montos-summary">
+                    <button type="button" class="montos-density-toggle" id="montosDensidad" onclick="toggleDensidadMontos()" title="Alternar vista compacta de totales" aria-label="Alternar vista compacta de totales">▤</button>
                     <div class="montos-total"><small>NETO</small><strong id="montosNeto">—</strong></div>
                     <div class="montos-total"><small>IVA</small><strong id="montosIva">—</strong></div>
                     <div class="montos-total"><small>TOTAL GLOBAL</small><strong id="montosTotal">—</strong></div>
@@ -444,13 +685,13 @@
                 <p id="montosMensaje" role="status" aria-live="polite"></p>
                 <div class="montos-scroll">
                     <table class="montos-table">
-                        <thead><tr><th class="col-numero">N°</th><th class="col-nombre">Nombre</th><th class="col-ubicacion">Ubicación</th><th class="col-ot">OT</th><th>Neto</th><th>IVA</th><th>Total</th><th>Estado / acciones</th></tr></thead>
+                        <thead><tr><th class="col-numero">N°</th><th class="col-emisor">Emisor</th><th class="col-comuna">Comuna</th><th class="col-ot">OT</th><th>Neto</th><th>IVA</th><th>Total</th><th class="montos-actions-col" aria-label="Estado y acciones"></th></tr></thead>
                         <tbody id="montosFilas"></tbody>
                     </table>
                 </div>
             </div>
             <div class="modal-footer">
-                <span style="margin-right:auto;color:var(--text-muted);font-size:var(--type-meta)">Los pendientes NO se suman. Las carpetas ignoradas se excluyen.</span>
+                <span id="montosNota">Los pendientes no se suman.</span>
                 <button type="button" class="btn-outline" id="montosToggleOT" onclick="toggleColumnaOT()" aria-pressed="false">Mostrar OT</button>
                 <button type="button" class="btn-outline" id="montosRefrescar" onclick="refrescarTodosMontos()">↻ Actualizar</button>
                 <button type="button" class="btn-master" onclick="cerrarModalMontos()">Cerrar</button>
@@ -1603,29 +1844,10 @@
             }
         }
 
-        // Módulo aislado de la interfaz: importe facturas. No toca el flujo de sync OT.
+        // Montos V1.1.1: emisor/comuna desde PDF, overrides manuales persistentes.
         const dineroCLP = n => '$ ' + Number(n).toLocaleString('es-CL', {maximumFractionDigits:0});
         let montosEnCarga = false;
         const MONTOS_OT_KEY = 'sincronizador_montos_mostrar_ot';
-
-        function extraerDatosVisualesFactura(item) {
-            const fuente = String(item.archivo || item.carpeta || '').replace(/\.[^.]+$/, '').trim();
-            const m = fuente.match(/^F\s*N\s*[°º]\s*([0-9]+(?:\s*[-–]\s*[0-9]+)?)\s*(.*)$/i);
-            const numero = m ? m[1].replace(/\s+/g, '') : (item.numero || '—');
-            let resto = m ? m[2].trim() : '';
-
-            // Si el archivo sólo trae el número, usar el nombre de la carpeta como respaldo.
-            if (!resto && item.carpeta) {
-                const carpeta = String(item.carpeta).trim();
-                const mc = carpeta.match(/^F\s*N\s*[°º]\s*[0-9]+(?:\s*[-–]\s*[0-9]+)?\s*(.*)$/i);
-                resto = mc ? mc[1].trim() : carpeta;
-            }
-
-            const partes = resto.split(',').map(v => v.trim()).filter(Boolean);
-            const nombre = partes.length ? partes.shift() : '—';
-            const ubicacion = partes.length ? partes.join(', ') : '—';
-            return { numero, nombre, ubicacion };
-        }
 
         function aplicarVisibilidadOT() {
             const tabla = document.querySelector('#modalMontos .montos-table');
@@ -1643,19 +1865,89 @@
             aplicarVisibilidadOT();
         }
 
+        function referenciaOperativaFactura(item) {
+            const fuente = String(item.archivo || item.carpeta || '')
+                .replace(/\.[^.]+$/, '')
+                .trim();
+
+            const m = fuente.match(
+                /^F\s*N\s*[°º]\s*[0-9]+(?:\s*[-–]\s*[0-9]+)?\s*(.*)$/i
+            );
+
+            const resto = (m ? m[1] : fuente).trim();
+            if (!resto) return '';
+
+            const partes = resto
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean);
+
+            // Primer segmento = nombre usado en el archivo.
+            // Los siguientes = contexto operativo del usuario.
+            if (partes.length <= 1) return '';
+
+            return partes.slice(1).join(' · ');
+        }
+
+        function clasePuntoEstadoMonto(item) {
+            const estado = String(item.estado || '').toLowerCase();
+
+            if (estado === 'extraido') return 'montos-dot-ok';
+            if (estado === 'manual') return 'montos-dot-manual';
+            if (estado === 'duplicado') return 'montos-dot-warning';
+            if (estado === 'manual_pendiente' || estado === 'pendiente') return 'montos-dot-warning';
+
+            if (item.motivo) return 'montos-dot-danger';
+            return 'montos-dot-neutral';
+        }
+
+        function textoPuntoEstadoMonto(item) {
+            const estado = String(item.estado || '').toLowerCase();
+
+            if (estado === 'extraido') return 'Datos extraídos correctamente';
+            if (estado === 'manual') return 'Datos corregidos manualmente';
+            if (estado === 'duplicado') return 'Documento duplicado';
+            if (estado === 'manual_pendiente' || estado === 'pendiente') return 'Pendiente de completar';
+
+            return item.motivo || 'Estado sin determinar';
+        }
+
+        const MONTOS_DENSIDAD_KEY = 'sincronizador_montos_resumen_compacto';
+
+        function aplicarDensidadMontos() {
+            const modal = document.getElementById('modalMontos');
+            const boton = document.getElementById('montosDensidad');
+            if (!modal || !boton) return;
+
+            const compacto = localStorage.getItem(MONTOS_DENSIDAD_KEY) === '1';
+            modal.classList.toggle('montos-resumen-compacto', compacto);
+            boton.setAttribute('aria-pressed', compacto ? 'true' : 'false');
+            boton.title = compacto
+                ? 'Expandir totales'
+                : 'Compactar totales para ver más facturas';
+        }
+
+        function toggleDensidadMontos() {
+            const compacto = localStorage.getItem(MONTOS_DENSIDAD_KEY) === '1';
+            localStorage.setItem(MONTOS_DENSIDAD_KEY, compacto ? '0' : '1');
+            aplicarDensidadMontos();
+        }
+
         function cerrarModalMontos() { document.getElementById('modalMontos').style.display='none'; }
         async function abrirModalMontos() {
             if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
             document.getElementById('modalMontos').style.display='flex';
             aplicarVisibilidadOT();
+            aplicarDensidadMontos();
             await cargarMontos();
         }
+
         async function cargarMontos() {
             if (montosEnCarga || !semanaSeleccionada) return;
             montosEnCarga=true;
             const mensaje=document.getElementById('montosMensaje');
             const semana=semanaSeleccionada;
-            mensaje.textContent='Leyendo facturas y metadata…';
+            mensaje.textContent='Leyendo…';
             try {
                 const r=await fetch('/api/montos?semana='+encodeURIComponent(semana));
                 const data=await r.json();
@@ -1663,61 +1955,142 @@
                 if (semana !== semanaSeleccionada) return;
                 for (const k of ['neto','iva','total'])
                     document.getElementById('montos'+k[0].toUpperCase()+k.slice(1)).textContent=dineroCLP(data.sumas[k]);
+
                 const tbody=document.getElementById('montosFilas');
                 const frag=document.createDocumentFragment();
                 for (const item of data.filas) {
                     const tr=document.createElement('tr');
-                    const celda=(valor)=>{const td=document.createElement('td');td.textContent=valor;return td;};
+                    const celda=(valor)=>{const td=document.createElement('td');td.textContent=(valor === null || valor === undefined || valor === '') ? '—' : valor;return td;};
                     const n=item.montos;
-                    const datosVisuales=extraerDatosVisualesFactura(item);
-                    const numero=celda(datosVisuales.numero); numero.className='col-numero'; numero.title=item.archivo || '';
-                    const nombre=celda(datosVisuales.nombre); nombre.className='col-nombre'; nombre.title=item.archivo || '';
-                    const ubicacion=celda(datosVisuales.ubicacion); ubicacion.className='col-ubicacion'; ubicacion.title=item.carpeta || '';
+
+                    const numero=celda(item.numero || '—');
+                    numero.className='col-numero';
+                    numero.title=item.archivo || '';
+
+                    const emisor=document.createElement('td');
+                    emisor.className='col-emisor';
+
+                    const emisorMain=document.createElement('span');
+                    emisorMain.className='montos-emisor-main';
+                    emisorMain.textContent=item.emisor || '—';
+                    emisor.appendChild(emisorMain);
+
+                    const referencia=referenciaOperativaFactura(item);
+                    if (referencia) {
+                        const contexto=document.createElement('small');
+                        contexto.className='montos-referencia';
+                        contexto.textContent=referencia;
+                        contexto.title=referencia;
+                        emisor.appendChild(contexto);
+                    }
+
+                    const emisorDetalle=[];
+                    if (item.emisor_original) emisorDetalle.push('Emisor PDF: '+item.emisor_original);
+                    if (item.emisor_manual) emisorDetalle.push('Nombre mostrado corregido manualmente');
+                    if (referencia) emisorDetalle.push('Referencia: '+referencia);
+                    emisor.title=emisorDetalle.join('\n');
+
+                    const comuna=celda(item.comuna || '—');
+                    comuna.className='col-comuna';
+                    comuna.title=item.comuna_manual ? 'Comuna corregida manualmente' : (item.comuna_auto ? 'Comuna extraída del PDF' : 'Comuna no detectada');
+
                     const ot=celda(item.ot || '—'); ot.className='col-ot';
                     const neto=celda(n && item.estado !== 'duplicado' ? dineroCLP(n.neto) : '—'); neto.className='monto-num';
                     const iva=celda(n && item.estado !== 'duplicado' ? dineroCLP(n.iva) : '—'); iva.className='monto-num';
                     const total=celda(n && item.estado !== 'duplicado' ? dineroCLP(n.total) : '—'); total.className='monto-num';
-                    tr.append(numero, nombre, ubicacion, ot, neto, iva, total);
+                    tr.append(numero, emisor, comuna, ot, neto, iva, total);
+
                     const estado=document.createElement('td');
-                    const textos={manual:'Manual',extraido:'Extraído',manual_pendiente:'Pendiente',duplicado:'Duplicado'};
-                    const titulo=document.createElement('span'); titulo.textContent=textos[item.estado]||'Pendiente';
-                    estado.appendChild(titulo);
-                    if (item.motivo) {const info=document.createElement('small');info.className='montos-error';info.textContent=item.motivo;estado.appendChild(info);}
-                    const acciones=document.createElement('div');acciones.className='montos-actions';
-                    const editar=document.createElement('button');editar.type='button';editar.className='btn-ghost';editar.textContent='✎';editar.title='Introducir o corregir importes manualmente';
-                    editar.addEventListener('click',()=>editarMonto(item));acciones.appendChild(editar);
-                    const refrescar=document.createElement('button');refrescar.type='button';refrescar.className='btn-ghost';refrescar.textContent='↻';refrescar.title='Reanalizar los documentos de esta carpeta';
-                    refrescar.addEventListener('click',()=>refrescarCarpeta(item));acciones.appendChild(refrescar);
-                    estado.appendChild(acciones);tr.appendChild(estado);frag.appendChild(tr);
+                    estado.className='montos-status-cell';
+
+                    const estadoLinea=document.createElement('div');
+                    estadoLinea.className='montos-status-row';
+
+                    const punto=document.createElement('span');
+                    punto.className='montos-status-dot '+clasePuntoEstadoMonto(item);
+                    punto.title=textoPuntoEstadoMonto(item);
+                    punto.setAttribute('aria-label', textoPuntoEstadoMonto(item));
+                    punto.setAttribute('role','img');
+
+                    const acciones=document.createElement('div');
+                    acciones.className='montos-actions';
+
+                    const editar=document.createElement('button');
+                    editar.type='button';
+                    editar.className='btn-ghost montos-icon-btn';
+                    editar.textContent='✎';
+                    editar.title='Corregir emisor, comuna o importes';
+                    editar.setAttribute('aria-label','Corregir emisor, comuna o importes');
+                    editar.addEventListener('click',()=>editarMonto(item));
+                    acciones.appendChild(editar);
+
+                    const refrescar=document.createElement('button');
+                    refrescar.type='button';
+                    refrescar.className='btn-ghost montos-icon-btn';
+                    refrescar.textContent='↻';
+                    refrescar.title='Reanalizar factura';
+                    refrescar.setAttribute('aria-label','Reanalizar factura');
+                    refrescar.addEventListener('click',()=>refrescarCarpeta(item));
+                    acciones.appendChild(refrescar);
+
+                    estadoLinea.append(punto, acciones);
+                    estado.appendChild(estadoLinea);
+
+                    if (item.motivo) {
+                        const info=document.createElement('small');
+                        info.className='montos-error';
+                        info.textContent=item.motivo;
+                        estado.appendChild(info);
+                    }
+
+                    tr.appendChild(estado);
+                    frag.appendChild(tr);
                 }
                 tbody.replaceChildren(frag);
                 if (!data.filas.length) {
                     const fila=document.createElement('tr');const td=document.createElement('td');td.colSpan=8;td.textContent='No hay archivos cuyo nombre comience por F N° y sean PDF o imagen.';fila.appendChild(td);tbody.appendChild(fila);
                 }
-                mensaje.textContent=`${data.filas.length} documento(s). ${data.pendientes} pendiente(s) excluido(s) del total.`;
+                mensaje.textContent = data.pendientes
+                    ? `${data.filas.length} facturas · ${data.pendientes} pendiente(s) sin sumar`
+                    : `${data.filas.length} facturas`;
+                aplicarVisibilidadOT();
             } catch(e) { mensaje.textContent='Error: '+e.message; }
             finally {montosEnCarga=false;}
         }
+
         function pedirCLP(nombre, anterior) {
             const v=prompt(nombre+' (pesos chilenos, sin decimales)', anterior==null?'':String(anterior));
             if(v===null) return null;
             const s=v.trim();
-            // Solo 123529, 123.529 o 123,529; evita parseInt parcial.
             if (!/^(?:\d{1,12}|\d{1,3}(?:[.,]\d{3})+)$/.test(s)) throw new Error('Importe no válido: '+nombre);
             return Number(s.replace(/[.,]/g,''));
         }
+
         async function editarMonto(item) {
             try {
+                const emisor=prompt('Emisor mostrado\n(para una persona puedes dejar: primer nombre + primer apellido)', item.emisor || item.emisor_auto || '');
+                if(emisor===null) return;
+                const comuna=prompt('Comuna del emisor', item.comuna || item.comuna_auto || '');
+                if(comuna===null) return;
+
+                const payload={ruta:item.ruta,archivo:item.archivo,emisor:emisor.trim(),comuna:comuna.trim()};
                 const previo=item.montos||{};
-                const neto=pedirCLP('Neto',previo.neto); if(neto===null)return;
-                const iva=pedirCLP('IVA',previo.iva); if(iva===null)return;
-                const total=pedirCLP('Total',previo.total); if(total===null)return;
-                if(Math.abs(neto+iva-total)>2 && !confirm('El total no coincide con Neto + IVA. ¿Hay impuestos adicionales y confirmas estos importes?')) return;
-                const r=await fetch('/api/montos/manual', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ruta:item.ruta,archivo:item.archivo,montos:{neto,iva,total}})});
+                const necesitaMontos=!item.montos;
+                const editarMontos=necesitaMontos || confirm('¿Quieres editar también Neto / IVA / Total?\n\nAceptar = editar montos\nCancelar = conservar los montos actuales');
+                if (editarMontos) {
+                    const neto=pedirCLP('Neto',previo.neto); if(neto===null)return;
+                    const iva=pedirCLP('IVA',previo.iva); if(iva===null)return;
+                    const total=pedirCLP('Total',previo.total); if(total===null)return;
+                    if(Math.abs(neto+iva-total)>2 && !confirm('El total no coincide con Neto + IVA. ¿Hay impuestos adicionales y confirmas estos importes?')) return;
+                    payload.montos={neto,iva,total};
+                }
+
+                const r=await fetch('/api/montos/manual', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
                 const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo guardar');
                 await cargarMontos();
             } catch(e) {alert(e.message);}
         }
+
         async function refrescarCarpeta(item) {
             const b=document.getElementById('montosRefrescar');b.disabled=true;
             try {
@@ -1726,9 +2099,10 @@
                 await cargarMontos();
             }catch(e){alert(e.message);}finally{b.disabled=false;}
         }
+
         async function refrescarTodosMontos() {
             const btn=document.getElementById('montosRefrescar'); btn.disabled=true;
-            const mensaje=document.getElementById('montosMensaje'); mensaje.textContent='Reanalizando facturas PDF de la semana…';
+            const mensaje=document.getElementById('montosMensaje'); mensaje.textContent='Actualizando…';
             try {
                 const r=await fetch('/api/montos/actualizar_semana',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({semana:semanaSeleccionada})});
                 const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo actualizar');
