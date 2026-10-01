@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from factura_montos import (
-    METADATA, actualizar_carpeta, es_factura, extraer_importes,
+    METADATA, _leer_ot_metadata, actualizar_carpeta, es_factura, extraer_importes,
     numero_factura, numero_clp, resumen,
 )
 
@@ -61,6 +61,14 @@ class MontosTests(unittest.TestCase):
             self.assertEqual(actualizar_carpeta(d, forzar=True)[0]['estado'], 'manual')
             ruta.write_bytes(b'foto cambiada')
             self.assertEqual(actualizar_carpeta(d)[0]['estado'], 'manual_pendiente')
+
+    def test_ot_metadata_prefiere_archivo_oculto(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, 'OT.txt').write_text('OT-ANTIGUA', encoding='utf-8')
+            self.assertEqual(_leer_ot_metadata(d), 'OT-ANTIGUA')
+
+            Path(d, '.OT.txt').write_text('OT-NUEVA', encoding='utf-8')
+            self.assertEqual(_leer_ot_metadata(d), 'OT-NUEVA')
 
     def test_pdf_real_generado_si_hay_pymupdf(self):
         try:
