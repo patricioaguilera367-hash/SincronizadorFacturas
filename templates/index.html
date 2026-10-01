@@ -821,6 +821,52 @@
             body *, body *::before, body *::after { transition-duration: .12s !important; }
         }
 
+    
+        /* Cola de revisión: sólo informa, nunca corrige automáticamente. */
+        .review-trigger.has-items {
+            color: var(--status-warning-text);
+            border-color: var(--status-warning-text);
+            background: var(--status-warning-bg);
+        }
+        #modalRevision .modal-content { max-width: 900px; }
+        .review-summary {
+            padding: 8px 16px;
+            color: var(--text-muted);
+            font-size: .72rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-body);
+        }
+        .review-list { display: grid; gap: 7px; padding: 12px 16px 16px; }
+        .review-item {
+            display: grid;
+            grid-template-columns: 10px minmax(150px,.7fr) minmax(0,1.7fr) auto;
+            gap: 9px;
+            align-items: center;
+            padding: 8px 9px;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: var(--bg-surface);
+        }
+        .review-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .review-dot-danger { background: var(--danger); }
+        .review-dot-warning { background: var(--warning); }
+        .review-dot-info { background: var(--text-muted); }
+        .review-folder { min-width: 0; font-size: .72rem; font-weight: 600; overflow-wrap: anywhere; }
+        .review-copy { min-width: 0; }
+        .review-message { font-size: .72rem; line-height: 1.2; }
+        .review-suggestion { margin-top: 2px; color: var(--text-muted); font-size: .63rem; line-height: 1.15; }
+        .review-open {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            min-height: 28px;
+            padding: 0;
+        }
+        @media(max-width:700px) {
+            .review-item { grid-template-columns: 8px minmax(0,1fr) auto; }
+            .review-copy { grid-column: 2 / -1; }
+        }
+
     </style>
 </head>
 <body>
@@ -855,6 +901,7 @@
                     <button class="utility-icon-btn btn-outline" type="button" onclick="abrirCarpeta('semana')" aria-label="Abrir carpeta de la semana" title="Abrir carpeta de la semana">📂</button>
                     <button class="btn-outline" onclick="crearNuevaFactura()" title="Crea una carpeta de trabajo vacía">➕ Nueva carpeta</button>
                     <button class="btn-outline btn-monto" onclick="abrirModalMontos()" aria-label="Resumen de montos y cobros" title="Resumen de facturas y cobros">$</button>
+                    <button class="btn-outline review-trigger" id="btnRevision" onclick="abrirModalRevision()" title="Revisar situaciones fuera de patrón">✓ Revisión</button>
                     <button class="btn-outline" onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Planilla</button>
                     <button class="btn-outline" onclick="copiarTablaExcel()" id="btnCopiar" title="Copia la tabla actual al portapapeles">📋 Copiar</button>
                     <button class="btn-master" onclick="sincronizarTodaLaSemana()" id="btnMaster">🚀 Sincronizar</button>
@@ -898,13 +945,31 @@
                 </table>
             </div>
             <div class="modal-footer">
-                <span style="color: var(--text-muted); font-size: var(--type-meta); margin-right: auto; align-self: center;">💡 Las carpetas ignoradas no aparecen en esta planilla.</span>
+                <span style="color: var(--text-muted); font-size: var(--type-meta); margin-right: auto; align-self: center;">💡 Ignorar sólo desactiva la sincronización; la edición y el seguimiento siguen activos.</span>
                 <button class="btn-outline" onclick="cerrarModalPlanilla()">Cancelar</button>
                 <button class="btn-master" onclick="guardarPlanilla()">Guardar cambios</button>
             </div>
         </div>
     </div>
 
+
+    <div class="modal-overlay" id="modalRevision" role="dialog" aria-modal="true" aria-labelledby="tituloRevision" tabindex="-1">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="tituloRevision">⚠ Revisión de situaciones fuera de patrón</h2>
+                <button type="button" class="btn-ghost" onclick="cerrarModalRevision()" aria-label="Cerrar">✖</button>
+            </div>
+            <div class="modal-body">
+                <div class="review-summary" id="revisionResumen">Selecciona una semana.</div>
+                <div class="review-list" id="revisionLista"></div>
+            </div>
+            <div class="modal-footer">
+                <span style="margin-right:auto;color:var(--text-muted);font-size:.68rem;">La revisión nunca modifica archivos automáticamente.</span>
+                <button type="button" class="btn-outline" onclick="cargarRevision(true)">↻ Actualizar</button>
+                <button type="button" class="btn-master" onclick="cerrarModalRevision()">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Modal independiente para montos: no modifica el editor de OT. -->
     <div class="modal-overlay" id="modalMontos" role="dialog" aria-modal="true" aria-labelledby="tituloMontos" tabindex="-1">
