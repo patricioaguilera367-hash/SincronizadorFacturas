@@ -238,6 +238,22 @@ class FilesystemBoundaryTests(unittest.TestCase):
             handler = template[start:end]
             self.assertNotIn("initSemanas();", handler)
 
+    def test_ignored_folders_are_hidden_only_from_bulk_ot_sheet(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+
+        start = template.index("function renderizarTablaPlanilla")
+        end = template.index("\n        function checkExpandirColumna", start)
+        planilla = template[start:end]
+        self.assertIn("if (fact.ignorado) return;", planilla)
+
+        start = template.index("function guardarPlanilla")
+        end = template.index("\n        function updateStats", start)
+        guardar_planilla = template[start:end]
+        self.assertIn("if (fact.ignorado) return;", guardar_planilla)
+
+        self.assertIn("Las carpetas ignoradas no aparecen aquí", template)
+        self.assertNotIn("tags-container.ignored-box", template)
+
     def test_ignore_ui_keeps_editing_controls_enabled(self):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("ignored-box", template)
