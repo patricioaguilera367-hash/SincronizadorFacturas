@@ -481,11 +481,6 @@ def get_semanas():
                             ruta_factura = ruta_aprobada(ruta_semana, f)
                             ot_content = leer_ot_metadata(ruta_factura)
                             sync_json = ruta_aprobada(ruta_factura, '.sync_state.json')
-                            ignorado_path = ruta_aprobada(ruta_factura, 'ignorado.txt')
-                            
-                            if ignorado_path and os.path.exists(ignorado_path): 
-                                continue 
-                                
                             if not ot_content:
                                 estado = "danger"
                                 break
