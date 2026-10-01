@@ -17,7 +17,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.obras = root / "obras"
         self.factura = self.facturas / "Semana 01" / "Factura válida"
         self.factura.mkdir(parents=True)
-        (self.factura / "OT.txt").write_text("OT1", encoding="utf-8")
+        (self.factura / ".OT.txt").write_text("OT1", encoding="utf-8")
         (self.factura / "documento.txt").write_text("interno", encoding="utf-8")
         self.outside = root / "outside"
         self.outside.mkdir()
@@ -85,12 +85,28 @@ class FilesystemBoundaryTests(unittest.TestCase):
             self.skipTest(f"No se pueden crear enlaces simbólicos: {error}")
 
         self.assert_rejected(self.client.post("/api/guardar", json={"ruta": str(link), "contenido": "cambio"}))
-        self.assertFalse((self.outside / "OT.txt").exists())
+        self.assertFalse((self.outside / ".OT.txt").exists())
+    def test_legacy_ot_is_read_and_migrated_on_next_write(self):
+        nuevo = self.factura / ".OT.txt"
+        viejo = self.factura / "OT.txt"
+        if nuevo.exists():
+            nuevo.unlink()
+        viejo.write_text("OT-LEGACY", encoding="utf-8")
+
+        response = self.client.get("/api/facturas", query_string={"semana": "Semana 01"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()[0]["ot_content"], "OT-LEGACY")
+
+        guardado = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": "OT-NUEVA"})
+        self.assertEqual(guardado.status_code, 200)
+        self.assertEqual(nuevo.read_text(encoding="utf-8"), "OT-NUEVA")
+        self.assertFalse(viejo.exists())
+
     def test_legitimate_in_root_operations_keep_their_existing_success_shape(self):
         response = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": "OT2"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
-        self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT2")
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT2")
 
     def test_delete_rejects_the_invoice_root_without_removing_it(self):
         response = self.client.post("/api/eliminar_factura", json={"ruta": str(self.facturas)})
@@ -107,7 +123,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
     def test_guardar_rejects_non_string_content_before_truncating_ot(self):
         response = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": ["no", "texto"]})
         self.assert_rejected(response)
-        self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT1")
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT1")
 
     def test_sync_all_rejects_malformed_items_before_any_write(self):
         malformed_items = [
@@ -120,7 +136,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
             with self.subTest(item=item):
                 response = self.client.post("/api/sincronizar_todo", json=[valid_item, item])
                 self.assert_rejected(response)
-                self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT1")
+                self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT1")
 
     def test_representative_in_root_routes_preserve_success_payloads(self):
         created = self.client.post("/api/nueva_factura", json={"semana": "Semana 01", "nombre": "Factura nueva"})
@@ -130,7 +146,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
 
         listed = self.client.get("/api/archivos", query_string={"ruta": str(self.factura)})
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(set(listed.get_json()), {"OT.txt", "documento.txt"})
+        self.assertEqual(set(listed.get_json()), {"documento.txt"})
 
 
     def test_sync_all_keeps_the_existing_in_root_result_shape(self):
@@ -145,20 +161,20 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertTrue((self.obras / "OT1 obra" / "Pensiones y almuerzos" / self.factura.name / "documento.txt").exists())
 
     def test_sync_single_persists_ot_before_matching_state(self):
-        (self.factura / "OT.txt").write_text("old", encoding="utf-8")
+        (self.factura / ".OT.txt").write_text("old", encoding="utf-8")
         response = self.client.post("/api/sincronizar", json={
             "ruta": str(self.factura), "nombre": self.factura.name, "contenido": "OT1"
         })
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
-        self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT1")
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT1")
         self.assertEqual(json.loads((self.factura / ".sync_state.json").read_text(encoding="utf-8"))["ots"], ["OT1"])
 
     def test_sync_all_lists_obras_once_for_multiple_invoices(self):
         second = self.factura.parent / "Factura dos"
         second.mkdir()
-        (second / "OT.txt").write_text("OT1", encoding="utf-8")
+        (second / ".OT.txt").write_text("OT1", encoding="utf-8")
         obras = os.path.normcase(os.path.realpath(self.obras))
         original_listdir = os.listdir
         calls = 0
@@ -183,7 +199,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
         original_open = open
 
         def fail_ot_write(path, mode="r", *args, **kwargs):
-            if Path(path).name == "OT.txt" and "w" in mode:
+            if Path(path).name == ".OT.txt" and "w" in mode:
                 raise OSError("OT write failed")
             return original_open(path, mode, *args, **kwargs)
 
@@ -329,7 +345,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
         response = self.client.post("/api/eliminar_factura", json={"ruta": str(week)})
         self.assert_rejected(response)
         self.assertTrue(week.exists())
-        self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT1")
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT1")
 
     def test_rename_rejects_a_week_directory_without_moving_its_invoices(self):
         week = self.facturas / "Semana 01"
