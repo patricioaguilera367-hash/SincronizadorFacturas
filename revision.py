@@ -9,7 +9,7 @@ from collections import Counter
 
 from flask import jsonify, request
 
-from factura_montos import es_factura, numero_factura, resumen
+from factura_montos import es_factura, numero_factura
 
 COBRO_MANUAL = '.cobro_manual.json'
 OT_NUEVO = '.OT.txt'
@@ -109,33 +109,42 @@ def detectar_carpeta(carpeta):
                 'Revisa los archivos duplicados antes de usar los totales.',
             ))
 
-        try:
-            resultado = resumen(carpeta)
-            vistos = set()
-            for doc in resultado.get('documentos', []):
-                estado = str(doc.get('estado') or '')
-                if estado in {'extraido', 'manual'}:
-                    continue
-                clave = (estado, doc.get('motivo') or '')
-                if clave in vistos:
-                    continue
-                vistos.add(clave)
-                motivo = doc.get('motivo') or 'La factura requiere revisión.'
+        # La cola de revisión no analiza PDFs ni escribe metadata.
+        # Sólo inspecciona resultados que ya existen.
+        montos_path = os.path.join(carpeta, '.factura_montos.json')
+        if os.path.isfile(montos_path):
+            montos_meta = _leer_json(montos_path)
+            if montos_meta is None:
                 hallazgos.append(_item(
                     carpeta,
-                    'factura_' + (estado or 'desconocida'),
-                    motivo,
-                    'danger' if estado == 'duplicado' else 'warning',
-                    'Abre $ y revisa o corrige los datos de la factura.',
+                    'metadata_montos_invalida',
+                    'Los datos guardados del análisis de facturas no se pueden leer.',
+                    'warning',
+                    'Abre $ y vuelve a actualizar los montos.',
                 ))
-        except OSError:
-            hallazgos.append(_item(
-                carpeta,
-                'factura_no_analizable',
-                'No se pudo analizar la información de facturación.',
-                'warning',
-                'Comprueba los archivos y vuelve a actualizar los montos.',
-            ))
+            else:
+                documentos = montos_meta.get('documentos', {})
+                if isinstance(documentos, dict):
+                    vistos = set()
+                    for nombre in facturas:
+                        doc = documentos.get(nombre)
+                        if not isinstance(doc, dict):
+                            continue
+                        estado = str(doc.get('estado') or '')
+                        if estado in {'extraido', 'manual'}:
+                            continue
+                        clave = (estado, doc.get('motivo') or '')
+                        if clave in vistos:
+                            continue
+                        vistos.add(clave)
+                        motivo = doc.get('motivo') or 'La factura requiere revisión.'
+                        hallazgos.append(_item(
+                            carpeta,
+                            'factura_' + (estado or 'desconocida'),
+                            motivo,
+                            'danger' if estado == 'duplicado' else 'warning',
+                            'Abre $ y revisa o corrige los datos de la factura.',
+                        ))
 
     if os.path.isfile(os.path.join(carpeta, OT_NUEVO)) and os.path.isfile(os.path.join(carpeta, OT_LEGACY)):
         hallazgos.append(_item(
