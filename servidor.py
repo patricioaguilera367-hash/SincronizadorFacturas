@@ -265,21 +265,59 @@ def leer_ot_metadata(ruta_factura):
     return ''
 
 
+def _preparar_archivo_oculto_para_escritura_windows(ruta):
+    """
+    Quita temporalmente el atributo Hidden antes de truncar/recrear el archivo.
+
+    CREATE_ALWAYS puede devolver Access Denied sobre un archivo Hidden en
+    Windows. Devuelve los atributos originales para restaurarlos después.
+    """
+    if os.name != 'nt' or not ruta or not os.path.exists(ruta):
+        return None
+
+    try:
+        import ctypes
+
+        FILE_ATTRIBUTE_HIDDEN = 0x2
+        INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
+
+        kernel32 = ctypes.windll.kernel32
+        atributos = kernel32.GetFileAttributesW(str(ruta))
+        if atributos == INVALID_FILE_ATTRIBUTES:
+            return None
+
+        if atributos & FILE_ATTRIBUTE_HIDDEN:
+            kernel32.SetFileAttributesW(
+                str(ruta),
+                atributos & ~FILE_ATTRIBUTE_HIDDEN
+            )
+
+        return atributos
+    except Exception:
+        return None
+
+
 def guardar_ot_metadata(ruta_factura, contenido):
     """
     Guarda siempre en .OT.txt.
 
-    Si existe OT.txt antiguo, se elimina sólo después de haber escrito
-    correctamente el nuevo archivo. Así una migración fallida no pierde datos.
+    En Windows quita Hidden sólo durante la escritura y lo restaura al final.
+    Si existe OT.txt antiguo, se elimina únicamente después de escribir el
+    archivo nuevo correctamente.
     """
     nueva = ruta_ot_metadata(ruta_factura)
     if not nueva:
         raise ValueError('Ruta OT no válida.')
 
-    with open(nueva, 'w', encoding='utf-8') as salida:
-        salida.write(contenido)
+    atributos_previos = _preparar_archivo_oculto_para_escritura_windows(nueva)
 
-    _ocultar_archivo_windows(nueva)
+    try:
+        with open(nueva, 'w', encoding='utf-8') as salida:
+            salida.write(contenido)
+    finally:
+        # El archivo interno siempre debe terminar oculto, incluso si ya lo era.
+        if os.path.exists(nueva):
+            _ocultar_archivo_windows(nueva)
 
     vieja = ruta_aprobada(ruta_factura, OT_METADATA_LEGACY)
     if vieja and os.path.normcase(vieja) != os.path.normcase(nueva) and os.path.exists(vieja):
