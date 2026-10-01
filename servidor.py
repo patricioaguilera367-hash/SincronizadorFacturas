@@ -2,14 +2,89 @@ import os
 import shutil
 import re
 import json
+import sys
+from pathlib import Path
 from datetime import date, timedelta
 from flask import Flask, jsonify, request, render_template, send_file
 
-app = Flask(__name__)
+def _directorio_app():
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
 
-# RUTAS DE TU SERVIDOR
-BASE_OBRAS = r"\\192.168.99.61\obras"
-BASE_FACTURAS = r"\\192.168.99.61\obras\Facturas pensiones\Facturas pensiones"
+
+def _directorio_recursos():
+    return Path(getattr(sys, '_MEIPASS', _directorio_app()))
+
+
+APP_DIR = _directorio_app()
+RESOURCE_DIR = _directorio_recursos()
+CONFIG_PATH = APP_DIR / 'config.json'
+
+CONFIG_DEFAULT = {
+    'servidor': '192.168.99.61',
+    'recurso': 'obras',
+    'ruta_facturas': ['Facturas pensiones', 'Facturas pensiones'],
+    'puerto': 5001,
+}
+
+
+def cargar_configuracion():
+    config = dict(CONFIG_DEFAULT)
+
+    if CONFIG_PATH.exists():
+        try:
+            with CONFIG_PATH.open('r', encoding='utf-8-sig') as entrada:
+                cargada = json.load(entrada)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f'No se pudo leer {CONFIG_PATH}: {exc}') from exc
+
+        if not isinstance(cargada, dict):
+            raise RuntimeError('config.json debe contener un objeto JSON.')
+        config.update(cargada)
+
+    servidor = str(config.get('servidor', '')).strip().strip('\\/')
+    recurso = str(config.get('recurso', '')).strip().strip('\\/')
+    ruta_facturas = config.get('ruta_facturas')
+    puerto = config.get('puerto', 5001)
+
+    if not servidor or '\\' in servidor or '/' in servidor:
+        raise RuntimeError('El campo servidor de config.json no es válido.')
+    if not recurso or '\\' in recurso or '/' in recurso:
+        raise RuntimeError('El campo recurso de config.json no es válido.')
+    if not isinstance(ruta_facturas, list) or not ruta_facturas or any(
+        not isinstance(parte, str)
+        or not parte.strip()
+        or parte in {'.', '..'}
+        or '\\' in parte
+        or '/' in parte
+        for parte in ruta_facturas
+    ):
+        raise RuntimeError('ruta_facturas debe ser una lista de carpetas relativas válidas.')
+    if type(puerto) is not int or not (1 <= puerto <= 65535):
+        raise RuntimeError('El puerto de config.json debe estar entre 1 y 65535.')
+
+    base_obras = rf"\\\\{servidor}\\{recurso}"
+    base_facturas = os.path.join(base_obras, *[parte.strip() for parte in ruta_facturas])
+
+    return {
+        **config,
+        'servidor': servidor,
+        'recurso': recurso,
+        'ruta_facturas': [parte.strip() for parte in ruta_facturas],
+        'puerto': puerto,
+        'base_obras': base_obras,
+        'base_facturas': base_facturas,
+    }
+
+
+CONFIG = cargar_configuracion()
+BASE_OBRAS = CONFIG['base_obras']
+BASE_FACTURAS = CONFIG['base_facturas']
+APP_HOST = '127.0.0.1'
+APP_PORT = CONFIG['puerto']
+
+app = Flask(__name__, template_folder=str(RESOURCE_DIR / 'templates'))
 
 FERIADOS_VIERNES = [
     date(2026, 4, 3), date(2026, 5, 1), date(2026, 9, 18), 
@@ -210,7 +285,7 @@ def evaluar_estado_sync(ruta_factura, ot_content):
         if estados['actual'] != estados['sincronizado']: return "badge-danger", "⚠ Estado de documento modificado"
         archivos_actuales = {}
         for item in os.listdir(ruta_factura):
-            if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
+            if item.lower() in ['ot.txt', '.ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
             path = ruta_aprobada(ruta_factura, item)
             if path and os.path.isfile(path): archivos_actuales[item] = {'size': os.path.getsize(path), 'mtime': int(os.path.getmtime(path))}
         archivos_sync = state.get('archivos', {})
@@ -231,7 +306,7 @@ def actualizar_estado_sync(ruta_factura, ots):
     estados_actuales = normalizar_estados_documentos(state_anterior)['actual']
     state = {'ots': ots, 'archivos': {}, 'estados': {'actual': estados_actuales, 'sincronizado': estados_actuales}}
     for item in os.listdir(ruta_factura):
-        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
+        if item.lower() in ['ot.txt', '.ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
         path = ruta_aprobada(ruta_factura, item)
         if path and os.path.isfile(path): state['archivos'][item] = {'size': os.path.getsize(path), 'mtime': int(os.path.getmtime(path))}
     with open(state_path, 'w', encoding='utf-8') as f: json.dump(state, f, ensure_ascii=False)
@@ -243,7 +318,7 @@ def sincronizar_carpetas_python(origen, destino):
         s_path = ruta_aprobada(origen, item)
         d_path = ruta_aprobada(destino, item)
         if not s_path or not d_path: continue
-        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
+        if item.lower() in ['ot.txt', '.ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
         if os.path.isdir(s_path): sincronizar_carpetas_python(s_path, d_path)
         else:
             if os.path.exists(d_path):
@@ -442,7 +517,7 @@ def listar_archivos():
     if os.path.exists(ruta):
         for f in os.listdir(ruta):
             ruta_archivo = ruta_aprobada(ruta, f)
-            if ruta_archivo and os.path.isfile(ruta_archivo) and f not in ['.sync_state.json', 'ignorado.txt', '.factura_montos.json']: archivos.append(f)
+            if ruta_archivo and os.path.isfile(ruta_archivo) and f.lower() not in ['ot.txt', '.ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: archivos.append(f)
     return jsonify(archivos)
 
 @app.route('/api/upload', methods=['POST'])
@@ -453,7 +528,7 @@ def subir_archivo():
         nombre = file.filename.replace('/', '').replace('\\', '')
         destino = ruta_aprobada(ruta, nombre) if componente_aprobado(nombre) else None
         if not destino: return error_ruta_invalida()
-        if nombre.lower() == '.factura_montos.json':
+        if nombre.lower() in {'ot.txt', '.ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json'}:
             return jsonify({'error': 'Nombre reservado.'}), 400
         file.save(destino)
         from factura_montos import es_factura, actualizar_archivo_cargado
@@ -630,16 +705,9 @@ def procesar_sincronizacion(data, cache_obras=None):
     except Exception:
         return jsonify({"status": "error", "mensaje": "No se pudo registrar el estado de sincronizacion."})
     return jsonify({"status": "ok"})
-from diagnostico_sync import registrar_diagnostico_ot
-
-registrar_diagnostico_ot(
-    app,
-    BASE_OBRAS,
-    ruta_aprobada
-)
 # Módulo opcional e independiente para importes de facturas.
 from factura_montos import registrar_rutas_montos
 registrar_rutas_montos(app, BASE_FACTURAS, ruta_factura_aprobada, ruta_aprobada)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5001)
+    app.run(host=APP_HOST, debug=False, use_reloader=False, port=APP_PORT)
