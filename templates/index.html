@@ -201,7 +201,25 @@
         .tag-close { cursor: pointer; font: inherit; font-weight: bold; color: inherit; background: transparent; border: 0; padding: 0; opacity: 0.8; transition: opacity 0.18s ease, color 0.18s ease; }
         .tag-close:hover { opacity: 1; color: var(--action-text); }
         .tag-input { border: none; outline: none; background: transparent; flex-grow: 1; min-width: 120px; font-family: inherit; color: var(--text-main); }
-        .ignore-active { color: var(--status-ignored-text) !important; background: var(--status-ignored-bg) !important; }
+        .ignore-active {
+            color: var(--status-ignored-text) !important;
+            background: var(--status-ignored-bg) !important;
+            box-shadow: inset 0 0 0 1px var(--status-ignored-text);
+        }
+        .ignore-chip {
+            display: none;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 6px;
+            border-radius: 999px;
+            background: var(--status-ignored-bg);
+            color: var(--status-ignored-text);
+            font-size: .61rem;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .ignore-chip.visible { display: inline-flex; }
 
         .archivos-row { display: none; background: var(--secondary); }
         .archivos-container { padding: 15px 30px; animation: surface-arrive 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -1491,26 +1509,60 @@
             }
         }
 
-        // --- FUNCION DEL BOTON IGNORAR CORREGIDA CON ALERTA REAL ---
+        function aplicarEstadoIgnoradoFila(index) {
+            const fact = facturasActuales[index];
+            if (!fact) return;
+
+            const sync = document.querySelector(`[data-sync-index="${index}"]`);
+            if (sync) {
+                sync.disabled = !!fact.ignorado;
+                sync.title = fact.ignorado
+                    ? 'Sincronización desactivada porque esta carpeta está ignorada'
+                    : 'Sincronizar carpeta';
+                sync.setAttribute('aria-label', sync.title);
+            }
+
+            const ignore = document.querySelector(`[data-ignore-index="${index}"]`);
+            if (ignore) {
+                const label = fact.ignorado ? 'Quitar estado ignorado' : 'Marcar como ignorada';
+                ignore.classList.toggle('ignore-active', !!fact.ignorado);
+                ignore.title = fact.ignorado
+                    ? 'Ignorada: sólo está desactivada la sincronización'
+                    : label;
+                ignore.setAttribute('aria-label', label);
+                ignore.setAttribute('aria-pressed', fact.ignorado ? 'true' : 'false');
+            }
+
+            const chip = document.querySelector(`[data-ignore-chip="${index}"]`);
+            if (chip) chip.classList.toggle('visible', !!fact.ignorado);
+        }
+
         async function toggleIgnorar(index) {
             const fact = facturasActuales[index];
             const submissionKey = `ignorar:${fact.ruta}`;
             if (!beginSubmission(submissionKey)) return;
+
+            const ignore = document.querySelector(`[data-ignore-index="${index}"]`);
+            if (ignore) ignore.disabled = true;
+
             try {
                 const res = await fetch('/api/toggle_ignorar', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ ruta: fact.ruta })
                 });
-                if (!res.ok) throw new Error();
-                if (semanaSeleccionada) cargarFacturas(semanaSeleccionada, document.querySelector('.week-item.active'));
-                initSemanas();
+                const data = await respuestaJson(res, 'No se pudo cambiar el estado ignorado.');
+
+                // Actualización quirúrgica: no recarga semana, tabla, sidebar ni archivos.
+                fact.ignorado = !!data.ignorado;
+                aplicarEstadoIgnoradoFila(index);
             } catch (error) {
-                alert("No se pudo cambiar el estado ignorado. Inténtalo de nuevo.");
+                alert(error.message || "No se pudo cambiar el estado ignorado. Inténtalo de nuevo.");
             } finally {
+                if (ignore) ignore.disabled = false;
                 endSubmission(submissionKey);
             }
         }
-        // -------------------------------------------------------------
 
         function formatVisualOT(backendOT) {
             let parts = backendOT.split('_');
@@ -1709,7 +1761,14 @@
                 badge.className = `status-badge ${fact.badge_class}`;
                 badge.id = `status_${index}`;
                 badge.textContent = fact.badge_text;
-                syncCell.append(statusControls, badge);
+
+                const ignoreChip = document.createElement('span');
+                ignoreChip.className = 'ignore-chip' + (fact.ignorado ? ' visible' : '');
+                ignoreChip.dataset.ignoreChip = String(index);
+                ignoreChip.textContent = '🚫 Ignorada';
+                ignoreChip.title = 'Sólo está desactivada la sincronización';
+
+                syncCell.append(statusControls, badge, ignoreChip);
                 stateCell.appendChild(syncCell);
 
                 const actionCell = document.createElement('td');
@@ -1726,17 +1785,20 @@
                 const sync = document.createElement('button');
                 sync.type = 'button';
                 sync.className = 'btn-primary';
-                sync.title = 'Sincronizar carpeta';
+                sync.dataset.syncIndex = String(index);
+                sync.title = fact.ignorado ? 'Sincronización desactivada porque esta carpeta está ignorada' : 'Sincronizar carpeta';
                 sync.disabled = fact.ignorado;
                 sync.textContent = '🔄';
-                sync.setAttribute('aria-label', 'Sincronizar carpeta');
+                sync.setAttribute('aria-label', sync.title);
                 sync.addEventListener('click', () => sincronizarIndividual(index));
                 const ignore = document.createElement('button');
                 ignore.type = 'button';
                 ignore.className = 'btn-ghost';
+                ignore.dataset.ignoreIndex = String(index);
                 const ignoreLabel = fact.ignorado ? 'Quitar estado ignorado' : 'Marcar como ignorada';
-                ignore.title = ignoreLabel + (fact.ignorado ? ' · solo desactiva sincronización' : '');
+                ignore.title = fact.ignorado ? 'Ignorada: sólo está desactivada la sincronización' : ignoreLabel;
                 ignore.setAttribute('aria-label', ignoreLabel);
+                ignore.setAttribute('aria-pressed', fact.ignorado ? 'true' : 'false');
                 ignore.textContent = '🚫';
                 if (fact.ignorado) ignore.classList.add('ignore-active');
                 ignore.addEventListener('click', () => toggleIgnorar(index));
