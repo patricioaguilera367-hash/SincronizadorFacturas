@@ -16,3 +16,8 @@ backup_*/
 instalar_*.py
 fix_*.py
 diagnostico_sync.py
+
+# Paquetes y restos de instalación
+patch/
+SincronizadorWeb_Montos.zip
+*.zip
