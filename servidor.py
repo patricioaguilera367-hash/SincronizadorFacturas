@@ -826,9 +826,11 @@ def procesar_sincronizacion(data, cache_obras=None):
 # Módulos de datos compartidos en el servidor.
 from factura_montos import registrar_rutas_montos
 from cobros import registrar_rutas_cobros
+from revision import registrar_rutas_revision
 
 registrar_rutas_montos(app, BASE_FACTURAS, ruta_factura_aprobada, ruta_aprobada)
 registrar_rutas_cobros(app, BASE_FACTURAS, ruta_aprobada)
+registrar_rutas_revision(app, BASE_FACTURAS, ruta_aprobada)
 
 if __name__ == '__main__':
     app.run(host=APP_HOST, debug=False, use_reloader=False, port=APP_PORT)
