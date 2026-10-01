@@ -739,6 +739,13 @@ def procesar_sincronizacion(data, cache_obras=None):
     data = datos_sincronizacion_aprobados(data)
     if not data: return error_ruta_invalida()
     origen, factura_nombre = data['ruta'], data['nombre']
+    ignorado_path = ruta_aprobada(origen, 'ignorado.txt')
+    if ignorado_path and os.path.exists(ignorado_path):
+        return jsonify({
+            "status": "error",
+            "mensaje": "Esta carpeta está ignorada para sincronización."
+        }), 409
+
     ots = [ot.strip() for ot in data.get('contenido', '').split(',') if ot.strip()]
     try:
         guardar_ot_metadata(origen, data['contenido'])
