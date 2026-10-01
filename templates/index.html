@@ -2093,7 +2093,17 @@
         // Montos V1.1.1: emisor/comuna desde PDF, overrides manuales persistentes.
         const dineroCLP = n => '$ ' + Number(n).toLocaleString('es-CL', {maximumFractionDigits:0});
         let montosEnCarga = false;
+        let cobrosEnCarga = false;
+        let cobrosActuales = [];
+        let ultimoTotalFacturas = 0;
+        let ultimoCobrosPendientes = 0;
         const MONTOS_OT_KEY = 'sincronizador_montos_mostrar_ot';
+
+        function actualizarTotalACobrar() {
+            document.getElementById('montosTotal').textContent = dineroCLP(ultimoTotalFacturas + ultimoCobrosPendientes);
+            const desglose = document.getElementById('montosDesglose');
+            if (desglose) desglose.textContent = `Facturas ${dineroCLP(ultimoTotalFacturas)} · Cobros ${dineroCLP(ultimoCobrosPendientes)}`;
+        }
 
         function aplicarVisibilidadOT() {
             const tabla = document.querySelector('#modalMontos .montos-table');
@@ -2179,13 +2189,19 @@
             aplicarDensidadMontos();
         }
 
-        function cerrarModalMontos() { document.getElementById('modalMontos').style.display='none'; }
+        function cerrarModalMontos() {
+            document.getElementById('modalMontos').style.display='none';
+            cerrarFormularioCobro();
+        }
         async function abrirModalMontos() {
             if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
             document.getElementById('modalMontos').style.display='flex';
             aplicarVisibilidadOT();
             aplicarDensidadMontos();
-            await cargarMontos();
+            ultimoTotalFacturas = 0;
+            ultimoCobrosPendientes = 0;
+            actualizarTotalACobrar();
+            await Promise.all([cargarMontos(), cargarCobros()]);
         }
 
         async function cargarMontos() {
@@ -2199,8 +2215,10 @@
                 const data=await r.json();
                 if (!r.ok) throw new Error(data.error || 'No se pudieron leer los montos');
                 if (semana !== semanaSeleccionada) return;
-                for (const k of ['neto','iva','total'])
-                    document.getElementById('montos'+k[0].toUpperCase()+k.slice(1)).textContent=dineroCLP(data.sumas[k]);
+                document.getElementById('montosNeto').textContent=dineroCLP(data.sumas.neto);
+                document.getElementById('montosIva').textContent=dineroCLP(data.sumas.iva);
+                ultimoTotalFacturas=Number(data.sumas.total || 0);
+                actualizarTotalACobrar();
 
                 const tbody=document.getElementById('montosFilas');
                 const frag=document.createDocumentFragment();
@@ -2302,6 +2320,188 @@
                 aplicarVisibilidadOT();
             } catch(e) { mensaje.textContent='Error: '+e.message; }
             finally {montosEnCarga=false;}
+        }
+
+        function parseMontoCobro(valor) {
+            const s=String(valor || '').trim();
+            if (!/^(?:\d{1,12}|\d{1,3}(?:[.,]\d{3})+)$/.test(s)) throw new Error('Monto inválido.');
+            const n=Number(s.replace(/[.,]/g,''));
+            if (!Number.isSafeInteger(n) || n <= 0) throw new Error('Monto inválido.');
+            return n;
+        }
+
+        function mostrarFormularioCobro(item = null) {
+            const form=document.getElementById('cobrosForm');
+            form.classList.add('visible');
+            document.getElementById('cobroId').value=item?.id || '';
+            document.getElementById('cobroNombre').value=item?.nombre || '';
+            document.getElementById('cobroDetalle').value=item?.detalle || '';
+            document.getElementById('cobroOT').value=item?.ot || '';
+            document.getElementById('cobroTipo').value=item?.tipo || 'transferencia';
+            document.getElementById('cobroMonto').value=item?.monto ? String(item.monto) : '';
+            document.getElementById('btnNuevoCobro').textContent=item ? 'Editando cobro' : '＋ Agregar cobro';
+            setTimeout(()=>document.getElementById('cobroNombre').focus(),0);
+        }
+
+        function cerrarFormularioCobro() {
+            const form=document.getElementById('cobrosForm');
+            if (!form) return;
+            form.classList.remove('visible');
+            form.reset();
+            document.getElementById('cobroId').value='';
+            const btn=document.getElementById('btnNuevoCobro');
+            if (btn) btn.textContent='＋ Agregar cobro';
+        }
+
+        function renderCobros(data) {
+            cobrosActuales=Array.isArray(data.items) ? data.items : [];
+            ultimoCobrosPendientes=Number(data.pendiente_total || 0);
+            actualizarTotalACobrar();
+
+            const resumen=document.getElementById('cobrosResumen');
+            resumen.textContent=cobrosActuales.length
+                ? `${data.pendientes || 0} pendiente(s) · ${dineroCLP(ultimoCobrosPendientes)}${data.realizados ? ` · ${data.realizados} realizado(s)` : ''}`
+                : 'Sin cobros cargados';
+
+            const tbody=document.getElementById('cobrosFilas');
+            const frag=document.createDocumentFragment();
+
+            cobrosActuales.forEach(item=>{
+                const tr=document.createElement('tr');
+                const tdTexto=valor=>{const td=document.createElement('td');td.textContent=valor || '—';return td;};
+
+                const nombre=tdTexto(item.nombre);
+                const detalle=tdTexto(item.detalle);
+                const ot=tdTexto(item.ot);
+                if (item.ot) {
+                    ot.title='Ctrl + click para abrir la carpeta OT';
+                    ot.style.cursor='pointer';
+                    ot.addEventListener('click',event=>{
+                        if (!(event.ctrlKey || event.metaKey)) return;
+                        event.preventDefault();
+                        abrirCarpeta('ot',{ot:item.ot});
+                    });
+                }
+                const tipo=tdTexto(item.tipo === 'abono' ? 'Abono' : 'Transferencia');
+
+                const monto=tdTexto(dineroCLP(item.monto));
+                monto.className='cobro-monto';
+
+                const estado=document.createElement('td');
+                const estadoVisual=document.createElement('span');
+                estadoVisual.className='cobro-status '+(item.estado === 'realizado' ? 'realizado' : '');
+                const dot=document.createElement('span'); dot.className='cobro-dot';
+                const estadoTexto=document.createElement('span');
+                estadoTexto.textContent=item.estado === 'realizado' ? 'Realizado' : 'Pendiente';
+                estadoVisual.append(dot,estadoTexto);
+                estado.appendChild(estadoVisual);
+
+                const acciones=document.createElement('td');
+                const grupo=document.createElement('div'); grupo.className='cobro-actions';
+
+                const editar=document.createElement('button');
+                editar.type='button'; editar.className='btn-ghost';
+                editar.textContent='✎'; editar.title='Editar cobro';
+                editar.addEventListener('click',()=>mostrarFormularioCobro(item));
+
+                const toggle=document.createElement('button');
+                toggle.type='button'; toggle.className='btn-ghost';
+                toggle.textContent=item.estado === 'realizado' ? '↩' : '✓';
+                toggle.title=item.estado === 'realizado' ? 'Volver a pendiente' : 'Marcar como realizado';
+                toggle.addEventListener('click',()=>cambiarEstadoCobro(item));
+
+                const eliminar=document.createElement('button');
+                eliminar.type='button'; eliminar.className='btn-ghost';
+                eliminar.textContent='×'; eliminar.title='Eliminar cobro';
+                eliminar.addEventListener('click',()=>eliminarCobro(item));
+
+                grupo.append(editar,toggle,eliminar);
+                acciones.appendChild(grupo);
+                tr.append(nombre,detalle,ot,tipo,monto,estado,acciones);
+                frag.appendChild(tr);
+            });
+
+            tbody.replaceChildren(frag);
+            if (!cobrosActuales.length) {
+                const tr=document.createElement('tr');
+                const td=document.createElement('td');
+                td.colSpan=7;
+                td.textContent='No hay transferencias ni abonos sin factura en esta semana.';
+                td.style.color='var(--text-muted)';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            }
+        }
+
+        async function cargarCobros() {
+            if (cobrosEnCarga || !semanaSeleccionada) return;
+            cobrosEnCarga=true;
+            const semana=semanaSeleccionada;
+            try {
+                const r=await fetch('/api/cobros?semana='+encodeURIComponent(semana));
+                const data=await respuestaJson(r,'No se pudieron cargar los cobros.');
+                if (semana !== semanaSeleccionada) return;
+                renderCobros(data);
+            } catch(e) {
+                document.getElementById('cobrosResumen').textContent='Error: '+e.message;
+            } finally {
+                cobrosEnCarga=false;
+            }
+        }
+
+        async function guardarCobro(event) {
+            event.preventDefault();
+            if (!semanaSeleccionada) return;
+            let monto;
+            try { monto=parseMontoCobro(document.getElementById('cobroMonto').value); }
+            catch(e) { alert(e.message); return; }
+
+            const payload={
+                semana:semanaSeleccionada,
+                id:document.getElementById('cobroId').value || undefined,
+                nombre:document.getElementById('cobroNombre').value.trim(),
+                detalle:document.getElementById('cobroDetalle').value.trim(),
+                ot:document.getElementById('cobroOT').value.trim(),
+                tipo:document.getElementById('cobroTipo').value,
+                monto
+            };
+
+            try {
+                const r=await fetch('/api/cobros/guardar',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify(payload)
+                });
+                const data=await respuestaJson(r,'No se pudo guardar el cobro.');
+                cerrarFormularioCobro();
+                renderCobros(data);
+            } catch(e) { alert(e.message); }
+        }
+
+        async function cambiarEstadoCobro(item) {
+            const siguiente=item.estado === 'realizado' ? 'pendiente' : 'realizado';
+            try {
+                const r=await fetch('/api/cobros/estado',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({semana:semanaSeleccionada,id:item.id,estado:siguiente})
+                });
+                const data=await respuestaJson(r,'No se pudo actualizar el cobro.');
+                renderCobros(data);
+            } catch(e) { alert(e.message); }
+        }
+
+        async function eliminarCobro(item) {
+            if (!confirm(`¿Eliminar el cobro de "${item.nombre}" por ${dineroCLP(item.monto)}?`)) return;
+            try {
+                const r=await fetch('/api/cobros/eliminar',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({semana:semanaSeleccionada,id:item.id})
+                });
+                const data=await respuestaJson(r,'No se pudo eliminar el cobro.');
+                renderCobros(data);
+            } catch(e) { alert(e.message); }
         }
 
         function pedirCLP(nombre, anterior) {
