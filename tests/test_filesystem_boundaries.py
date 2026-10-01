@@ -209,6 +209,35 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertEqual(single.get_json()["status"], "error")
         self.assertIn("ignorada", single.get_json()["mensaje"].lower())
 
+    def test_ignore_toggle_updates_only_its_row_in_ui(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+        start = template.index("async function toggleIgnorar")
+        end = template.index("\n        function formatVisualOT", start)
+        handler = template[start:end]
+
+        self.assertIn("fact.ignorado = !!data.ignorado", handler)
+        self.assertIn("aplicarEstadoIgnoradoFila(index)", handler)
+        self.assertNotIn("cargarFacturas(", handler)
+        self.assertNotIn("initSemanas(", handler)
+
+        self.assertIn("data-ignore-chip", template)
+        self.assertIn("🚫 Ignorada", template)
+        self.assertIn("data-sync-index", template)
+        self.assertIn("data-ignore-index", template)
+
+    def test_non_structural_row_actions_do_not_rebuild_week_sidebar(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("initSemanas(true);", template)
+
+        for handler_name in ("ciclarEstadoDocumento", "handleDrop", "guardar"):
+            start = template.index(f"function {handler_name}") if f"function {handler_name}" in template else template.index(f"async function {handler_name}")
+            next_async = template.find("\n        async function", start + 1)
+            next_func = template.find("\n        function", start + 1)
+            candidates = [x for x in (next_async, next_func) if x != -1]
+            end = min(candidates) if candidates else len(template)
+            handler = template[start:end]
+            self.assertNotIn("initSemanas();", handler)
+
     def test_ignore_ui_keeps_editing_controls_enabled(self):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("ignored-box", template)
