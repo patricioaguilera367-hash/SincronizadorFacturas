@@ -389,6 +389,72 @@ def sincronizar_carpetas_python(origen, destino):
                     shutil.copy2(s_path, nuevo_d_path)
             else: shutil.copy2(s_path, d_path)
 
+def _abrir_directorio_local(ruta):
+    """Abre una carpeta en el Explorador del PC que ejecuta la app."""
+    if os.name != 'nt':
+        raise OSError('Abrir carpetas sólo está disponible en Windows.')
+    if not ruta or not os.path.isdir(ruta):
+        raise FileNotFoundError('La carpeta no existe o no está disponible.')
+    os.startfile(ruta)
+
+
+def _resolver_carpeta_ot(ot):
+    if not isinstance(ot, str) or not ot.strip():
+        return None
+
+    candidatos = [normalizar_codigo_ot(ot).upper()]
+    if componente_aprobado(ot):
+        candidatos.append(ot)
+
+    for candidato in dict.fromkeys(candidatos):
+        ruta = ruta_aprobada(BASE_OBRAS, candidato)
+        if ruta and os.path.isdir(ruta):
+            return ruta
+
+    carpetas = listar_carpetas_obras([ot])
+    if not carpetas:
+        return None
+
+    ot_normalizada = normalizar_codigo_ot(ot)
+    for relativa in carpetas:
+        if not coincide_codigo_ot(os.path.basename(relativa), ot_normalizada):
+            continue
+        ruta = ruta_aprobada(BASE_OBRAS, *relativa.split(os.sep))
+        if ruta and os.path.isdir(ruta):
+            return ruta
+
+    return None
+
+
+@app.route('/api/abrir_carpeta', methods=['POST'])
+def abrir_carpeta():
+    data = request.get_json(silent=True) or {}
+    tipo = data.get('tipo')
+
+    if tipo == 'facturas':
+        ruta = BASE_FACTURAS
+    elif tipo == 'semana':
+        semana = data.get('semana')
+        if not componente_aprobado(semana):
+            return error_ruta_invalida()
+        ruta = ruta_aprobada(BASE_FACTURAS, semana)
+    elif tipo == 'factura':
+        ruta = ruta_factura_aprobada(data.get('ruta'))
+    elif tipo == 'ot':
+        ruta = _resolver_carpeta_ot(data.get('ot'))
+    else:
+        return jsonify({'error': 'Tipo de carpeta no válido.'}), 400
+
+    if not ruta or not os.path.isdir(ruta):
+        return jsonify({'error': 'La carpeta no existe o no está disponible.'}), 404
+
+    try:
+        _abrir_directorio_local(ruta)
+        return jsonify({'status': 'ok'})
+    except OSError as exc:
+        return jsonify({'error': str(exc) or 'No se pudo abrir la carpeta.'}), 500
+
+
 @app.route('/')
 def index(): return render_template('index.html')
 
@@ -747,9 +813,12 @@ def procesar_sincronizacion(data, cache_obras=None):
     except Exception:
         return jsonify({"status": "error", "mensaje": "No se pudo registrar el estado de sincronizacion."})
     return jsonify({"status": "ok"})
-# Módulo opcional e independiente para importes de facturas.
+# Módulos de datos compartidos en el servidor.
 from factura_montos import registrar_rutas_montos
+from cobros import registrar_rutas_cobros
+
 registrar_rutas_montos(app, BASE_FACTURAS, ruta_factura_aprobada, ruta_aprobada)
+registrar_rutas_cobros(app, BASE_FACTURAS, ruta_aprobada)
 
 if __name__ == '__main__':
     app.run(host=APP_HOST, debug=False, use_reloader=False, port=APP_PORT)
