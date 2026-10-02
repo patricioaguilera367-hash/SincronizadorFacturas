@@ -28,3 +28,7 @@ build/
 dist/
 *.spec
 config.json
+
+# Cache local e indice OT (datos de empresa, nunca versionar)
+data/
+indice_obras.csv
