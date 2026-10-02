@@ -314,6 +314,16 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse((self.factura / ".sync_state.json").exists())
 
+    def test_full_resync_remains_explicitly_available(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("Todas las OT ya están sincronizadas. ¿Quieres sincronizarlas todas nuevamente?", template)
+        self.assertIn("forzarTodas = !!(event && (event.ctrlKey || event.shiftKey))", template)
+        self.assertIn("const otsPendientes = forzarTodas", template)
+        self.assertIn("Nueva sincronización completa: se procesarán todas las OT.", template)
+        self.assertIn("sincronizarTodaLaSemana(event)", template)
+        self.assertIn("forzar una nueva sincronización completa de toda la semana", template.lower())
+
     def test_retry_skips_successful_ot_chips(self):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
 
