@@ -314,6 +314,28 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse((self.factura / ".sync_state.json").exists())
 
+    def test_retry_skips_successful_ot_chips(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "const otsPendientes = ots.filter(ot => estadoSyncOt(index, ot)?.estado !== 'success');",
+            template,
+        )
+        self.assertIn("Las OT ya verdes se omiten", template)
+        self.assertIn("reconciliarEstadosSyncOT(index);", template)
+
+        marker_start = template.index("function marcarComoDesactualizado")
+        marker_end = template.index("\n        function toggleArchivos", marker_start)
+        marker = template[marker_start:marker_end]
+        self.assertIn("reconciliarEstadosSyncOT(index)", marker)
+        self.assertNotIn("limpiarEstadosSyncOT(index)", marker)
+
+        guardar_start = template.index("async function guardar(index)")
+        guardar_end = template.index("\n        async function sincronizarFacturaPorOT", guardar_start)
+        guardar = template[guardar_start:guardar_end]
+        self.assertIn("reconciliarEstadosSyncOT(index)", guardar)
+        self.assertNotIn("limpiarEstadosSyncOT(index)", guardar)
+
     def test_sync_ui_has_live_per_ot_progress_and_longer_per_ot_timeout(self):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
         self.assertIn("/api/sincronizar_ot", template)
