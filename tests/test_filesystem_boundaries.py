@@ -356,6 +356,73 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertIn("sync-success", template)
         self.assertIn("sync-error", template)
 
+    def test_sync_uses_persistent_index_before_recursive_search(self):
+        indexed = self.obras / "206_NT_001 proyecto"
+        (indexed / "Pensiones y almuerzos").mkdir(parents=True)
+        (self.factura / ".OT.txt").write_text("206_NT_001", encoding="utf-8")
+
+        result = servidor._refrescar_indice_raiz(forzar=True)
+        self.assertTrue(result["ok"])
+
+        payload = {
+            "ruta": str(self.factura),
+            "nombre": self.factura.name,
+            "contenido": "206_NT_001",
+        }
+
+        with patch.object(
+            servidor,
+            "listar_carpetas_obras",
+            side_effect=AssertionError("No debe recorrer el árbol para una OT indexada"),
+        ):
+            response = self.client.post("/api/sincronizar", json=payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "ok")
+        self.assertTrue(
+            (indexed / "Pensiones y almuerzos" / self.factura.name / "documento.txt").exists()
+        )
+
+    def test_offline_snapshot_routes_are_read_only(self):
+        weeks = self.client.get("/api/semanas")
+        self.assertEqual(weeks.status_code, 200)
+        detail = self.client.get("/api/facturas", query_string={"semana": "Semana 01"})
+        self.assertEqual(detail.status_code, 200)
+
+        servidor._marcar_estado_servidor(False)
+        with patch.object(servidor, "_comprobar_servidor", return_value=False):
+            cached_weeks = self.client.get("/api/semanas")
+            cached_detail = self.client.get(
+                "/api/facturas",
+                query_string={"semana": "Semana 01"},
+            )
+
+        self.assertEqual(cached_weeks.status_code, 200)
+        self.assertEqual(cached_weeks.headers.get("X-Sincronizador-Offline"), "1")
+        self.assertEqual(cached_detail.status_code, 200)
+        self.assertEqual(cached_detail.headers.get("X-Sincronizador-Offline"), "1")
+        self.assertEqual(cached_detail.get_json()[0]["nombre"], self.factura.name)
+
+        before = (self.factura / ".OT.txt").read_text(encoding="utf-8")
+        blocked = self.client.post(
+            "/api/guardar",
+            json={"ruta": str(self.factura), "contenido": "NO-DEBE-GUARDAR"},
+        )
+        self.assertEqual(blocked.status_code, 503)
+        self.assertIn("sólo de lectura", blocked.get_json()["error"])
+        self.assertEqual(
+            (self.factura / ".OT.txt").read_text(encoding="utf-8"),
+            before,
+        )
+
+    def test_offline_ui_is_visualization_only(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("Modo sin conexión · sólo lectura", template)
+        self.assertIn("/api/runtime", template)
+        self.assertIn("data-online-only", template)
+        self.assertIn("if (modoOffline) return;", template)
+        self.assertIn("No se permite guardar, validar ni sincronizar", template)
+
     def test_sync_single_persists_ot_before_matching_state(self):
         (self.factura / ".OT.txt").write_text("old", encoding="utf-8")
         response = self.client.post("/api/sincronizar", json={
