@@ -1616,6 +1616,20 @@
             renderTags(index);
         }
 
+        function reconciliarEstadosSyncOT(index) {
+            const actuales = new Set(tagsData[index] || []);
+            const previos = estadosSyncOT[index] || {};
+            const siguientes = {};
+
+            Object.entries(previos).forEach(([ot, estado]) => {
+                if (actuales.has(ot) && estado?.estado === 'success') {
+                    siguientes[ot] = estado;
+                }
+            });
+
+            estadosSyncOT[index] = siguientes;
+        }
+
         function renderTags(index) {
             const listDiv = document.getElementById(`tags_list_${index}`);
             if (!listDiv) return;
@@ -2215,7 +2229,10 @@
         }
 
         function marcarComoDesactualizado(index) {
-            limpiarEstadosSyncOT(index);
+            // Si sólo cambia la lista de OT, conservamos las OT ya copiadas
+            // correctamente y dejamos pendiente únicamente lo nuevo/corregido.
+            reconciliarEstadosSyncOT(index);
+            renderTags(index);
             const badge = document.getElementById(`status_${index}`);
             if (badge && badge.textContent.includes("✓ Sincronizado")) {
                 setStatus(index, "danger", "⚠ Código OT modificado");
@@ -2328,7 +2345,7 @@
             const submissionKey = `guardar:${fact.ruta}`;
             if (!beginSubmission(submissionKey)) return;
             const contenido = document.getElementById(`ot_${index}`).value;
-            limpiarEstadosSyncOT(index);
+            reconciliarEstadosSyncOT(index);
             setStatus(index, 'loading', 'Guardando...');
             try {
                 const res = await fetch('/api/guardar', {
@@ -2369,15 +2386,27 @@
             if (syncButton) syncButton.disabled = true;
 
             const contenido = ots.join(', ');
+            reconciliarEstadosSyncOT(index);
+
+            const otsPendientes = ots.filter(ot => estadoSyncOt(index, ot)?.estado !== 'success');
             const errores = [];
-            let exitos = 0;
+            let exitos = ots.length - otsPendientes.length;
             const inicio = performance.now();
 
             try {
-                setStatus(index, 'loading', `Sincronizando 0/${ots.length} OT…`, 'Cada OT se procesa por separado.');
+                setStatus(
+                    index,
+                    'loading',
+                    otsPendientes.length
+                        ? `Sincronizando ${exitos}/${ots.length} OT…`
+                        : `Finalizando ${ots.length}/${ots.length} OT…`,
+                    otsPendientes.length
+                        ? 'Las OT ya verdes se omiten; sólo se reintentan las pendientes.'
+                        : 'Todas las OT ya fueron copiadas; registrando estado final.'
+                );
 
-                for (let pos = 0; pos < ots.length; pos++) {
-                    const ot = ots[pos];
+                for (let pos = 0; pos < otsPendientes.length; pos++) {
+                    const ot = otsPendientes[pos];
                     setEstadoSyncOT(index, ot, 'running', 'Sincronizando esta OT…');
 
                     try {
@@ -2410,8 +2439,8 @@
                     setStatus(
                         index,
                         'loading',
-                        `Sincronizando ${pos + 1}/${ots.length} OT…`,
-                        `${exitos} completada(s), ${errores.length} con problema(s).`
+                        `Sincronizando ${exitos + errores.length}/${ots.length} OT…`,
+                        `${exitos} completada(s), ${errores.length} con problema(s). Las verdes no se repiten.`
                     );
                 }
 
