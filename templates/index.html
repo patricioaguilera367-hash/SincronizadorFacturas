@@ -1095,7 +1095,66 @@
         let weeksRequestToken = 0;
         let revisionEnCarga = false;
         let revisionActual = {items: [], total: 0, danger: 0, warning: 0};
+        let modoOffline = false;
+        let snapshotActualizado = null;
         const submissionsInFlight = new Set();
+
+        function formatearFechaSnapshot(valor) {
+            if (!valor) return 'sin fecha disponible';
+            const fecha = new Date(valor);
+            if (Number.isNaN(fecha.getTime())) return String(valor);
+            return fecha.toLocaleString('es-CL');
+        }
+
+        function aplicarModoOffline(offline, snapshot = null) {
+            modoOffline = !!offline;
+            if (snapshot) snapshotActualizado = snapshot;
+            document.body.classList.toggle('offline-mode', modoOffline);
+
+            const banner = document.getElementById('offlineBanner');
+            if (banner) {
+                banner.classList.toggle('visible', modoOffline);
+                banner.innerHTML = modoOffline
+                    ? `🟠 <strong>Modo sin conexión · sólo lectura.</strong> <small>Mostrando el último contexto guardado (${formatearFechaSnapshot(snapshotActualizado)}). No se permite guardar, validar ni sincronizar hasta recuperar el servidor.</small>`
+                    : '';
+            }
+
+            document.querySelectorAll('[data-online-only]').forEach(control => {
+                control.disabled = modoOffline;
+            });
+
+            document.querySelectorAll('.tag-input, .tag-close, .status-control, .file-picker').forEach(control => {
+                control.disabled = modoOffline;
+            });
+
+            document.querySelectorAll('[data-sync-index]').forEach(control => {
+                const index = Number(control.dataset.syncIndex);
+                const fact = facturasActuales[index];
+                control.disabled = modoOffline || !!fact?.ignorado;
+            });
+        }
+
+        function actualizarModoDesdeRespuesta(res) {
+            const offline = res.headers.get('X-Sincronizador-Offline');
+            const snapshot = res.headers.get('X-Sincronizador-Snapshot');
+            if (snapshot) snapshotActualizado = snapshot;
+            if (offline === '1') aplicarModoOffline(true, snapshotActualizado);
+            else if (offline === '0') aplicarModoOffline(false, snapshotActualizado);
+        }
+
+        async function cargarEstadoRuntime(forzar = false) {
+            try {
+                const res = await fetch('/api/runtime' + (forzar ? '?forzar=1' : ''));
+                const data = await res.json();
+                if (!res.ok) return;
+                const eraOffline = modoOffline;
+                const snapshot = data.snapshot?.updated_at || snapshotActualizado;
+                aplicarModoOffline(!data.online, snapshot);
+                if (eraOffline && data.online) initSemanas();
+            } catch (_) {
+                aplicarModoOffline(true, snapshotActualizado);
+            }
+        }
 
         function beginSubmission(key) {
             if (submissionsInFlight.has(key)) return false;
@@ -1123,6 +1182,7 @@
         }
 
         async function respuestaJson(res, fallback) {
+            actualizarModoDesdeRespuesta(res);
             let data;
             try { data = await res.json(); }
             catch (error) { throw new Error(fallback); }
@@ -1196,7 +1256,7 @@
         }
 
         async function cargarRevision(forzarRender=false) {
-            if (!semanaSeleccionada || revisionEnCarga) return;
+            if (modoOffline || !semanaSeleccionada || revisionEnCarga) return;
             revisionEnCarga=true;
             try {
                 const semana=semanaSeleccionada;
@@ -1368,7 +1428,11 @@
             return false;
         }
 
-        document.addEventListener("DOMContentLoaded", () => { initSemanas(); });
+        document.addEventListener("DOMContentLoaded", () => {
+            cargarEstadoRuntime(false);
+            initSemanas();
+            setInterval(() => cargarEstadoRuntime(false), 30000);
+        });
 
         function actualizarEstadoSemana(button, estado) {
             const statusLabels = { success: "Sincronización registrada", warning: "Pendiente de sincronización", danger: "Faltan códigos OT", none: "Sin facturas", loading: "Verificando estado", unavailable: "Estado no disponible" };
