@@ -1501,6 +1501,7 @@
                     fragment.appendChild(li);
                 });
                 ul.replaceChildren(fragment);
+                aplicarModoOffline(modoOffline, snapshotActualizado);
                 if (!detallado) initSemanas(true);
             } catch (error) {
                 if (!detallado && requestToken === weeksRequestToken) mostrarEstadoSemanas('No se pudieron cargar las semanas.', () => initSemanas());
@@ -1518,6 +1519,7 @@
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
         async function abrirCarpeta(tipo, extra = {}) {
+            if (modoOffline) return;
             const payload = { tipo, ...extra };
             if (tipo === 'semana') {
                 const semana = extra.semana || semanaSeleccionada;
