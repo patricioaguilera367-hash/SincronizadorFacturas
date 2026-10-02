@@ -77,14 +77,31 @@ Copy-Item (Join-Path $Root "config.example.json") (Join-Path $Dist "config.json"
 Copy-Item (Join-Path $Root "INICIAR_PORTABLE.bat") (Join-Path $Dist "INICIAR.bat") -Force
 Copy-Item (Join-Path $Root "MOSTRAR_LOGO.bat") (Join-Path $Dist "MOSTRAR_LOGO.bat") -Force
 
+# indice_obras.csv es un seed local opcional. Esta ignorado por Git porque
+# contiene estructura interna de la empresa. Si existe al construir, viaja
+# junto al portable y se importa una sola vez al indice persistente local.
+$IndiceSeed = Join-Path $Root "indice_obras.csv"
+if (Test-Path $IndiceSeed) {
+    Copy-Item $IndiceSeed (Join-Path $Dist "indice_obras.csv") -Force
+    Write-Host "Seed OT incluido: indice_obras.csv"
+}
+else {
+    Write-Host "Seed OT no encontrado; el indice se construira dinamicamente." -ForegroundColor Yellow
+}
+
 $leerme = @'
 SINCRONIZADORFACTURAS PORTABLE
 
 1. Copie esta carpeta completa al PC de destino.
 2. No instale Python, Flask, PyMuPDF ni Git.
-3. Verifique que el PC pueda acceder a \\192.168.99.61\obras.
-4. Ejecute INICIAR.bat.
-5. Si cambia el servidor, edite config.json.
+3. Ejecute INICIAR.bat.
+4. Si el servidor esta disponible, la app actualiza el indice OT en segundo plano.
+5. Si el servidor no esta disponible, la app puede mostrar el ultimo snapshot en modo SOLO LECTURA.
+6. Si cambia el servidor, edite config.json.
+
+Si existe indice_obras.csv junto al ejecutable, se usa solo como seed inicial.
+Luego el indice local se mantiene en data\indice_ot.json.
+El snapshot de contexto se guarda en data\snapshot_app.json.
 
 La ventana de consola queda visible a proposito.
 Cerrar esa ventana detiene el servidor.
