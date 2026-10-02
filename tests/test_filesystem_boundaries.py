@@ -273,6 +273,57 @@ class FilesystemBoundaryTests(unittest.TestCase):
         self.assertEqual(response.get_json(), {"resultados": [{"index": 7, "status": "ok", "errores": []}]})
         self.assertTrue((self.obras / "OT1 obra" / "Pensiones y almuerzos" / self.factura.name / "documento.txt").exists())
 
+    def test_per_ot_sync_reports_progress_before_finalizing_state(self):
+        ot2 = self.obras / "OT2 obra"
+        (ot2 / "Pensiones y almuerzos").mkdir(parents=True)
+
+        payload = {
+            "ruta": str(self.factura),
+            "nombre": self.factura.name,
+            "contenido": "OT1, OT2",
+        }
+
+        first = self.client.post("/api/sincronizar_ot", json={**payload, "ot": "OT1"})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.get_json()["status"], "ok")
+        self.assertTrue((self.obras / "OT1 obra" / "Pensiones y almuerzos" / self.factura.name / "documento.txt").exists())
+        self.assertFalse((ot2 / "Pensiones y almuerzos" / self.factura.name).exists())
+        self.assertFalse((self.factura / ".sync_state.json").exists())
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT1, OT2")
+
+        second = self.client.post("/api/sincronizar_ot", json={**payload, "ot": "OT2"})
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.get_json()["status"], "ok")
+        self.assertTrue((ot2 / "Pensiones y almuerzos" / self.factura.name / "documento.txt").exists())
+        self.assertFalse((self.factura / ".sync_state.json").exists())
+
+        final = self.client.post("/api/finalizar_sincronizacion", json=payload)
+        self.assertEqual(final.status_code, 200)
+        self.assertEqual(final.get_json(), {"status": "ok"})
+        state = json.loads((self.factura / ".sync_state.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(state["ots"]), {"OT1", "OT2"})
+
+    def test_per_ot_sync_rejects_ot_not_attached_to_invoice(self):
+        payload = {
+            "ruta": str(self.factura),
+            "nombre": self.factura.name,
+            "contenido": "OT1",
+            "ot": "OT999",
+        }
+        response = self.client.post("/api/sincronizar_ot", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse((self.factura / ".sync_state.json").exists())
+
+    def test_sync_ui_has_live_per_ot_progress_and_longer_per_ot_timeout(self):
+        template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("/api/sincronizar_ot", template)
+        self.assertIn("/api/finalizar_sincronizacion", template)
+        self.assertIn("setEstadoSyncOT(index, ot, 'success'", template)
+        self.assertIn("setEstadoSyncOT(index, ot, 'error'", template)
+        self.assertIn("90000", template)
+        self.assertIn("sync-success", template)
+        self.assertIn("sync-error", template)
+
     def test_sync_single_persists_ot_before_matching_state(self):
         (self.factura / ".OT.txt").write_text("old", encoding="utf-8")
         response = self.client.post("/api/sincronizar", json={
