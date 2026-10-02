@@ -242,6 +242,8 @@ def _rutas_indice_ot(ot, refrescar=False, incluir_ausentes=False):
 
 
 def _comprobar_servidor(forzar=False):
+    if not forzar and _servidor_online_reciente():
+        return True
     if not forzar and _servidor_offline_reciente():
         return False
 
