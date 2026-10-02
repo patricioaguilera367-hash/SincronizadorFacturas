@@ -154,6 +154,15 @@ def _servidor_offline_reciente(segundos=5.0):
         )
 
 
+def _servidor_online_reciente(segundos=10.0):
+    with _CACHE_STATE_LOCK:
+        return (
+            _SERVER_STATE.get('root') == BASE_OBRAS
+            and _SERVER_STATE.get('online') is True
+            and (time.monotonic() - float(_SERVER_STATE.get('checked_mono') or 0.0)) < segundos
+        )
+
+
 def _respuesta_datos(data, offline=False):
     respuesta = jsonify(data)
     respuesta.headers['X-Sincronizador-Offline'] = '1' if offline else '0'
@@ -299,7 +308,11 @@ def bloquear_escrituras_en_snapshot():
         return None
     if request.method in {'GET', 'HEAD', 'OPTIONS'}:
         return None
-    if not _servidor_marcado_offline():
+
+    if _servidor_online_reciente():
+        return None
+
+    if not _servidor_marcado_offline() and _comprobar_servidor(forzar=True):
         return None
 
     return jsonify({
