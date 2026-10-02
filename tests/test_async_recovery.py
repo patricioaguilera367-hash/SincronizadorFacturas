@@ -89,8 +89,8 @@ async function initSemanas(){init}
         for start, end in (
             ("async function crearNuevaSemana()", "async function crearNuevaFactura"),
             ("async function eliminarCarpeta", "async function renombrarCarpeta"),
-            ("async function guardar", "async function sincronizarIndividual"),
-            ("async function sincronizarIndividual", "async function sincronizarTodaLaSemana"),
+            ("async function guardar", "async function sincronizarFacturaPorOT"),
+            ("async function sincronizarFacturaPorOT", "async function sincronizarIndividual"),
             ("async function sincronizarTodaLaSemana", "</script>"),
         ):
             with self.subTest(function=start):
@@ -98,6 +98,12 @@ async function initSemanas(){init}
                 self.assertIn("beginSubmission", action)
                 self.assertIn("finally", action)
                 self.assertIn("endSubmission", action)
+
+        wrapper = self.body(
+            "async function sincronizarIndividual",
+            "async function sincronizarTodaLaSemana",
+        )
+        self.assertIn("sincronizarFacturaPorOT(index", wrapper)
 
 
 if __name__ == "__main__":
