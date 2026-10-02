@@ -258,9 +258,10 @@ class FilesystemBoundaryTests(unittest.TestCase):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("ignored-box", template)
         self.assertNotIn("input.disabled = fact.ignorado", template)
-        self.assertIn("sync.disabled = fact.ignorado", template)
+        self.assertIn("input.disabled = false", template)
+        self.assertIn("sync.disabled = modoOffline || fact.ignorado", template)
         self.assertIn("if (fact.ignorado) return;", template)
-        self.assertIn("Ignorar sólo desactiva la sincronización", template)
+        self.assertIn("Las carpetas ignoradas no aparecen aquí", template)
 
     def test_sync_all_keeps_the_existing_in_root_result_shape(self):
         response = self.client.post("/api/sincronizar_todo", json=[{
@@ -327,8 +328,9 @@ class FilesystemBoundaryTests(unittest.TestCase):
     def test_retry_skips_successful_ot_chips(self):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
 
+        self.assertIn("const otsPendientes = forzarTodas", template)
         self.assertIn(
-            "const otsPendientes = ots.filter(ot => estadoSyncOt(index, ot)?.estado !== 'success');",
+            "ots.filter(ot => estadoSyncOt(index, ot)?.estado !== 'success');",
             template,
         )
         self.assertIn("Las OT ya verdes se omiten", template)
@@ -533,13 +535,23 @@ class FilesystemBoundaryTests(unittest.TestCase):
 
     def test_sync_handlers_refresh_existing_week_badges_in_place(self):
         template = (Path(__file__).parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
-        for handler in ("sincronizarIndividual", "sincronizarTodaLaSemana"):
-            start = template.index(f"async function {handler}")
-            end = template.find("\n        async function", start + 1)
-            if end == -1:
-                end = template.index("\n        </script>", start)
-            self.assertIn("initSemanas(true);", template[start:end])
-            self.assertNotIn("initSemanas();", template[start:end])
+
+        granular_start = template.index("async function sincronizarFacturaPorOT")
+        granular_end = template.index("\n        async function sincronizarIndividual", granular_start)
+        granular = template[granular_start:granular_end]
+        self.assertIn("initSemanas(true);", granular)
+        self.assertNotIn("initSemanas();", granular)
+
+        wrapper_start = template.index("async function sincronizarIndividual")
+        wrapper_end = template.index("\n        async function sincronizarTodaLaSemana", wrapper_start)
+        wrapper = template[wrapper_start:wrapper_end]
+        self.assertIn("sincronizarFacturaPorOT(index", wrapper)
+
+        week_start = template.index("async function sincronizarTodaLaSemana")
+        week_end = template.index("\n        // Montos", week_start)
+        week = template[week_start:week_end]
+        self.assertIn("initSemanas(true);", week)
+        self.assertNotIn("initSemanas();", week)
 
     def test_sync_defers_obras_metadata_and_skips_unsafe_match(self):
         (self.obras / "No coincide").mkdir()
