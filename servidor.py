@@ -3,9 +3,26 @@ import shutil
 import re
 import json
 import sys
+import socket
+import threading
+import time
 from pathlib import Path
 from datetime import date, timedelta
 from flask import Flask, jsonify, request, render_template, send_file
+
+from cache_runtime import (
+    actualizar_snapshot_facturas,
+    actualizar_snapshot_semanas,
+    candidatos_indice,
+    estadisticas_indice,
+    info_snapshot,
+    marcar_ruta_ausente,
+    reconciliar_indice_raiz,
+    registrar_ruta_encontrada,
+    sembrar_indice_desde_csv,
+    snapshot_facturas,
+    snapshot_semanas,
+)
 
 def _directorio_app():
     if getattr(sys, 'frozen', False):
@@ -85,6 +102,130 @@ APP_HOST = '127.0.0.1'
 APP_PORT = CONFIG['puerto']
 
 app = Flask(__name__, template_folder=str(RESOURCE_DIR / 'templates'))
+
+CACHE_DIR = APP_DIR / 'data'
+SEED_INDEX_CSV = APP_DIR / 'indice_obras.csv'
+_CACHE_STATE_LOCK = threading.RLock()
+_SERVER_STATE = {'root': None, 'online': None, 'checked_at': None, 'checked_mono': 0.0}
+_INDEX_REFRESH_STATE = {'root': None, 'last_mono': 0.0, 'last_result': None}
+_CACHE_BACKGROUND_STARTED = False
+
+
+def _cache_dir_actual():
+    # En pruebas aislamos el cache junto al árbol temporal del test.
+    if app.config.get('TESTING'):
+        try:
+            return Path(BASE_OBRAS).resolve().parent / '.sincronizador_cache_test'
+        except Exception:
+            pass
+    return CACHE_DIR
+
+
+def _indice_path():
+    return _cache_dir_actual() / 'indice_ot.json'
+
+
+def _snapshot_path():
+    return _cache_dir_actual() / 'snapshot_app.json'
+
+
+def _asegurar_seed_indice():
+    if app.config.get('TESTING'):
+        return {'importadas': 0, 'usado': False}
+    return sembrar_indice_desde_csv(_indice_path(), SEED_INDEX_CSV, BASE_OBRAS)
+
+
+def _marcar_estado_servidor(online):
+    with _CACHE_STATE_LOCK:
+        _SERVER_STATE.update({
+            'root': BASE_OBRAS,
+            'online': bool(online),
+            'checked_at': time.time(),
+            'checked_mono': time.monotonic(),
+        })
+
+
+def _servidor_offline_reciente(segundos=5.0):
+    with _CACHE_STATE_LOCK:
+        return (
+            _SERVER_STATE.get('root') == BASE_OBRAS
+            and _SERVER_STATE.get('online') is False
+            and (time.monotonic() - float(_SERVER_STATE.get('checked_mono') or 0.0)) < segundos
+        )
+
+
+def _respuesta_datos(data, offline=False):
+    respuesta = jsonify(data)
+    respuesta.headers['X-Sincronizador-Offline'] = '1' if offline else '0'
+    snapshot = info_snapshot(_snapshot_path())
+    if snapshot.get('updated_at'):
+        respuesta.headers['X-Sincronizador-Snapshot'] = snapshot['updated_at']
+    return respuesta
+
+
+def _respuesta_snapshot_semanas():
+    semanas = snapshot_semanas(_snapshot_path())
+    if not semanas:
+        return jsonify({
+            'error': 'Servidor no disponible y todavía no existe un snapshot local de semanas.',
+            'offline': True,
+        }), 503
+    return _respuesta_datos(semanas, offline=True)
+
+
+def _respuesta_snapshot_facturas(semana):
+    facturas = snapshot_facturas(_snapshot_path(), semana)
+    if facturas is None:
+        return jsonify({
+            'error': 'Servidor no disponible y esta semana todavía no tiene detalle guardado localmente.',
+            'offline': True,
+        }), 503
+    return _respuesta_datos(facturas, offline=True)
+
+
+def _puerto_smb_disponible():
+    if app.config.get('TESTING'):
+        return os.path.isdir(BASE_OBRAS)
+
+    if not str(BASE_OBRAS).startswith('\\\\'):
+        return os.path.isdir(BASE_OBRAS)
+
+    try:
+        with socket.create_connection((CONFIG['servidor'], 445), timeout=1.2):
+            return True
+    except OSError:
+        return False
+
+
+def _refrescar_indice_raiz(forzar=False):
+    global _INDEX_REFRESH_STATE
+    _asegurar_seed_indice()
+
+    with _CACHE_STATE_LOCK:
+        mismo_root = _INDEX_REFRESH_STATE.get('root') == BASE_OBRAS
+        reciente = (time.monotonic() - float(_INDEX_REFRESH_STATE.get('last_mono') or 0.0)) < 5.0
+        if not forzar and mismo_root and reciente and _INDEX_REFRESH_STATE.get('last_result') is not None:
+            return _INDEX_REFRESH_STATE['last_result']
+
+    resultado = reconciliar_indice_raiz(_indice_path(), BASE_OBRAS)
+    _marcar_estado_servidor(bool(resultado.get('ok')))
+
+    with _CACHE_STATE_LOCK:
+        _INDEX_REFRESH_STATE = {
+            'root': BASE_OBRAS,
+            'last_mono': time.monotonic(),
+            'last_result': resultado,
+        }
+
+    return resultado
+
+
+def _rutas_indice_ot(ot, refrescar=False):
+    _asegurar_seed_indice()
+    if refrescar:
+        _refrescar_indice_raiz(forzar=True)
+    return candidatos_indice(_indice_path(), BASE_OBRAS, ot)
+
 
 FERIADOS_VIERNES = [
     date(2026, 4, 3), date(2026, 5, 1), date(2026, 9, 18), 
