@@ -37,7 +37,8 @@ class DynamicRenderingTests(unittest.TestCase):
         upload = self.function_body("async function handleDrop", "async function guardar")
 
         self.assertNotIn("innerHTML +=", tags)
-        self.assertIn("tag.textContent = `${visualOT} `", tags)
+        self.assertIn("label.textContent = visualOT", tags)
+        self.assertIn("indicator.textContent =", tags)
         self.assertNotIn("bodyHtml", planilla)
         self.assertIn("nombre.textContent = fact.nombre", planilla)
         self.assertIn("input.value = value", planilla)
