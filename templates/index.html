@@ -237,6 +237,22 @@
         }
         .ignore-chip.visible { display: inline-flex; }
 
+        .offline-banner {
+            display: none;
+            margin: 0 0 12px;
+            padding: 9px 12px;
+            border: 1px solid var(--status-warning-text);
+            border-radius: 10px;
+            background: var(--status-warning-bg);
+            color: var(--status-warning-text);
+            font-size: var(--type-meta);
+            font-weight: 650;
+            line-height: var(--leading-dense);
+        }
+        .offline-banner.visible { display: block; }
+        .offline-banner small { font-weight: 500; opacity: .9; }
+        body.offline-mode [data-online-only]:disabled { opacity: .45; cursor: not-allowed; }
+
         .archivos-row { display: none; background: var(--secondary); }
         .archivos-container { padding: 15px 30px; animation: surface-arrive 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
         .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 20px; text-align: center; background: var(--bg-surface); transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
@@ -910,13 +926,14 @@
             <p class="sidebar-title">Gestor Obras ✨</p>
             <input type="text" id="buscadorSemanas" class="search-box" placeholder="🔍 Buscar semanas" onkeyup="filtrarSemanas()">
         </div>
-        <button class="btn-add-week" onclick="crearNuevaSemana()" id="btnNuevaSemana">➕ Crear próxima semana</button>
+        <button class="btn-add-week" onclick="crearNuevaSemana()" id="btnNuevaSemana" data-online-only>➕ Crear próxima semana</button>
         <ul class="week-list" id="listaSemanas">
             <li class="week-loading">Cargando carpetas...</li>
         </ul>
     </aside>
 
     <main class="main-content">
+        <div class="offline-banner" id="offlineBanner" role="status" aria-live="polite"></div>
         <div class="header-card">
             <div class="header-left">
                 <button type="button" class="menu-icon" onclick="toggleSidebar()" aria-label="Mostrar u ocultar menú lateral" title="Mostrar u ocultar menú lateral">
@@ -929,16 +946,16 @@
             </div>
             
             <div class="header-actions">
-                <button class="utility-icon-btn btn-outline" type="button" onclick="abrirCarpeta('facturas')" aria-label="Abrir carpeta general de facturas" title="Abrir carpeta general de facturas">🗂️</button>
+                <button class="utility-icon-btn btn-outline" type="button" data-online-only onclick="abrirCarpeta('facturas')" aria-label="Abrir carpeta general de facturas" title="Abrir carpeta general de facturas">🗂️</button>
                 <button class="dark-mode-toggle" id="darkModeBtn" onclick="toggleDarkMode()" aria-label="Activar modo oscuro" title="Activar modo oscuro">🌙</button>
                 <div id="botonesAccion" style="display: none; gap: 6px; flex-wrap: nowrap;">
-                    <button class="utility-icon-btn btn-outline" type="button" onclick="abrirCarpeta('semana')" aria-label="Abrir carpeta de la semana" title="Abrir carpeta de la semana">📂</button>
-                    <button class="btn-outline" onclick="crearNuevaFactura()" title="Crea una carpeta de trabajo vacía">➕ Nueva carpeta</button>
-                    <button class="btn-outline btn-monto" onclick="abrirModalMontos()" aria-label="Resumen de montos y cobros" title="Resumen de facturas y cobros">$</button>
-                    <button class="btn-outline review-trigger" id="btnRevision" onclick="abrirModalRevision()" title="Revisar situaciones fuera de patrón">✓ Revisión</button>
-                    <button class="btn-outline" onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Planilla</button>
+                    <button class="utility-icon-btn btn-outline" type="button" data-online-only onclick="abrirCarpeta('semana')" aria-label="Abrir carpeta de la semana" title="Abrir carpeta de la semana">📂</button>
+                    <button class="btn-outline" data-online-only onclick="crearNuevaFactura()" title="Crea una carpeta de trabajo vacía">➕ Nueva carpeta</button>
+                    <button class="btn-outline btn-monto" data-online-only onclick="abrirModalMontos()" aria-label="Resumen de montos y cobros" title="Resumen de facturas y cobros">$</button>
+                    <button class="btn-outline review-trigger" data-online-only id="btnRevision" onclick="abrirModalRevision()" title="Revisar situaciones fuera de patrón">✓ Revisión</button>
+                    <button class="btn-outline" data-online-only onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Planilla</button>
                     <button class="btn-outline" onclick="copiarTablaExcel()" id="btnCopiar" title="Copia la tabla actual al portapapeles">📋 Copiar</button>
-                    <button class="btn-master" onclick="sincronizarTodaLaSemana(event)" id="btnMaster" title="Sincroniza pendientes. Ctrl+click o Shift+click fuerza una nueva sincronización completa.">🚀 Sincronizar</button>
+                    <button class="btn-master" data-online-only onclick="sincronizarTodaLaSemana(event)" id="btnMaster" title="Sincroniza pendientes. Ctrl+click o Shift+click fuerza una nueva sincronización completa.">🚀 Sincronizar</button>
                 </div>
             </div>
         </div>
