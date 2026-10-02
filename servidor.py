@@ -1079,96 +1079,47 @@ def sincronizar_todo():
     return jsonify({"resultados": resultados})
 
 def _sincronizar_una_ot(origen, factura_nombre, ot, cache_obras=None):
-    """Sincroniza una sola OT y devuelve un resultado granular."""
-    cache_obras = cache_obras if cache_obras is not None else {}
-    sincronizada = False
-    fallo_copia = False
-    ot_encontrada = False
-    metadata_denegada = False
+    """Sincroniza una sola OT usando el índice persistente como vía rápida."""
+    resolucion = _resolver_rutas_ot(ot, cache_obras)
 
-    candidatos_directos = [normalizar_codigo_ot(ot).upper()]
-    if componente_aprobado(ot):
-        candidatos_directos.append(ot)
+    if resolucion.get('status') == 'unavailable':
+        return {
+            "ot": ot,
+            "status": "error",
+            "mensaje": "No se pudo acceder a las carpetas de obras.",
+            "errores": [],
+        }
 
-    for candidato in dict.fromkeys(candidatos_directos):
-        destino_base = ruta_aprobada(BASE_OBRAS, candidato)
-        if not destino_base:
-            continue
-        try:
-            os.stat(destino_base)
-        except FileNotFoundError:
-            continue
-        except OSError:
-            ot_encontrada = True
-            metadata_denegada = True
-            continue
-
-        if not os.path.isdir(destino_base):
-            continue
-
-        ot_encontrada = True
-        destino_final = ruta_aprobada(destino_base, "Pensiones y almuerzos", factura_nombre)
-        if destino_final:
-            try:
-                sincronizar_carpetas_python(origen, destino_final)
-                sincronizada = True
-                break
-            except Exception:
-                fallo_copia = True
-
-    if not sincronizada:
-        if 'carpetas' not in cache_obras:
-            cache_obras['carpetas'] = listar_carpetas_obras(
-                cache_obras.get('ots_pendientes', [ot])
+    if resolucion.get('status') != 'ok' or not resolucion.get('rutas'):
+        if resolucion.get('historica'):
+            error = (
+                f"La carpeta de la OT {ot} existía en el índice, "
+                "pero actualmente no se encuentra en obras."
             )
+        else:
+            error = f"La OT {ot} no existe o no fue encontrada en obras."
+        return {"ot": ot, "status": "warning", "errores": [error]}
 
-        carpetas_obras = cache_obras['carpetas']
-        if carpetas_obras is None:
-            return {
-                "ot": ot,
-                "status": "error",
-                "mensaje": "No se pudo acceder a las carpetas de obras.",
-                "errores": [],
-            }
+    fallo_copia = False
+    for destino_base in resolucion['rutas']:
+        destino_final = ruta_aprobada(
+            destino_base,
+            "Pensiones y almuerzos",
+            factura_nombre,
+        )
+        if not destino_final:
+            continue
 
-        ot_clean = normalizar_codigo_ot(ot)
-        for c in carpetas_obras:
-            nombre_carpeta = os.path.basename(c)
-            if not coincide_codigo_ot(nombre_carpeta, ot_clean):
-                continue
-
-            ot_encontrada = True
-            destino_base = ruta_aprobada(BASE_OBRAS, *c.split(os.sep))
-            if not destino_base:
-                continue
-            try:
-                os.stat(destino_base)
-            except OSError:
-                continue
-            if not os.path.isdir(destino_base):
-                continue
-
-            destino_final = ruta_aprobada(destino_base, "Pensiones y almuerzos", factura_nombre)
-            if not destino_final:
-                continue
-
-            try:
-                sincronizar_carpetas_python(origen, destino_final)
-                sincronizada = True
-                break
-            except Exception:
-                fallo_copia = True
-
-    if sincronizada:
-        return {"ot": ot, "status": "ok", "errores": []}
+        try:
+            sincronizar_carpetas_python(origen, destino_final)
+            return {"ot": ot, "status": "ok", "errores": []}
+        except Exception:
+            fallo_copia = True
 
     if fallo_copia:
         error = f"No se pudo copiar la carpeta de factura en la OT {ot}."
-    elif ot_encontrada:
-        sufijo = "." if metadata_denegada else " en obras."
-        error = f"No se pudo acceder a la carpeta de la OT {ot}{sufijo}"
     else:
-        error = f"La OT {ot} no existe en obras."
+        error = f"No se pudo acceder a la carpeta de la OT {ot} en obras."
 
     return {"ot": ot, "status": "warning", "errores": [error]}
 
