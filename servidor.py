@@ -661,18 +661,28 @@ def index(): return render_template('index.html')
 
 @app.route('/api/semanas', methods=['GET'])
 def get_semanas():
+    rapido = request.args.get('rapido') == '1'
+
+    if not _comprobar_servidor():
+        return _respuesta_snapshot_semanas()
+
     try:
         semanas = []
-        rapido = request.args.get('rapido') == '1'
         for d in os.listdir(BASE_FACTURAS):
             ruta_semana = ruta_aprobada(BASE_FACTURAS, d)
             if ruta_semana and os.path.isdir(ruta_semana):
                 if rapido:
                     semanas.append({"nombre": d, "estado": "loading"})
                     continue
+
                 estado = "success"
                 try:
-                    carpetas = [f for f in os.listdir(ruta_semana) if ruta_aprobada(ruta_semana, f) and os.path.isdir(ruta_aprobada(ruta_semana, f))]
+                    carpetas = [
+                        f
+                        for f in os.listdir(ruta_semana)
+                        if ruta_aprobada(ruta_semana, f)
+                        and os.path.isdir(ruta_aprobada(ruta_semana, f))
+                    ]
                     if not carpetas:
                         estado = "none"
                     else:
@@ -683,38 +693,70 @@ def get_semanas():
                             if not ot_content:
                                 estado = "danger"
                                 break
-                            elif not sync_json or not os.path.exists(sync_json):
-                                if estado != "danger": estado = "warning"
+                            if not sync_json or not os.path.exists(sync_json):
+                                if estado != "danger":
+                                    estado = "warning"
                 except OSError:
                     estado = "unavailable"
+
                 semanas.append({"nombre": d, "estado": estado})
-        return jsonify(semanas)
-    except Exception: return jsonify({"error": "No se pudieron cargar las semanas."}), 500
+
+        _marcar_estado_servidor(True)
+        if not rapido:
+            actualizar_snapshot_semanas(_snapshot_path(), semanas)
+        return _respuesta_datos(semanas, offline=False)
+    except OSError:
+        _marcar_estado_servidor(False)
+        return _respuesta_snapshot_semanas()
+    except Exception:
+        return jsonify({"error": "No se pudieron cargar las semanas."}), 500
 
 @app.route('/api/facturas', methods=['GET'])
 def get_facturas():
     semana = request.args.get('semana')
-    if not componente_aprobado(semana): return error_ruta_invalida()
-    ruta_semana = ruta_aprobada(BASE_FACTURAS, semana)
-    facturas_data = []
-    if ruta_semana and os.path.exists(ruta_semana):
-        for f in os.listdir(ruta_semana):
-            ruta_factura = ruta_aprobada(ruta_semana, f)
-            if ruta_factura and os.path.isdir(ruta_factura):
-                ignorado_path = ruta_aprobada(ruta_factura, "ignorado.txt")
-                ot_content = leer_ot_metadata(ruta_factura)
-                
-                ignorado = bool(ignorado_path and os.path.exists(ignorado_path))
-                # Ignorar sólo excluye la carpeta de acciones de sincronización.
-                # El estado, las etiquetas y el seguimiento siguen funcionando.
-                clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content)
-                try:
-                    with open(ruta_aprobada(ruta_factura, '.sync_state.json'), 'r', encoding='utf-8') as file_state:
-                        estado_documentos = normalizar_estados_documentos(json.load(file_state))['actual']
-                except Exception:
-                    estado_documentos = normalizar_estados_documentos({})['actual']
-                facturas_data.append({"nombre": f, "ruta": ruta_factura, "ot_content": ot_content, "badge_class": clase_b, "badge_text": texto_b, "ignorado": ignorado, "estados": estado_documentos})
-    return jsonify(facturas_data)
+    if not componente_aprobado(semana):
+        return error_ruta_invalida()
+
+    if not _comprobar_servidor():
+        return _respuesta_snapshot_facturas(semana)
+
+    try:
+        ruta_semana = ruta_aprobada(BASE_FACTURAS, semana)
+        facturas_data = []
+
+        if ruta_semana and os.path.exists(ruta_semana):
+            for f in os.listdir(ruta_semana):
+                ruta_factura = ruta_aprobada(ruta_semana, f)
+                if ruta_factura and os.path.isdir(ruta_factura):
+                    ignorado_path = ruta_aprobada(ruta_factura, "ignorado.txt")
+                    ot_content = leer_ot_metadata(ruta_factura)
+                    ignorado = bool(ignorado_path and os.path.exists(ignorado_path))
+
+                    # Ignorar sólo excluye la sincronización y la planilla OT.
+                    clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content)
+                    try:
+                        state_path = ruta_aprobada(ruta_factura, '.sync_state.json')
+                        with open(state_path, 'r', encoding='utf-8') as file_state:
+                            estado_documentos = normalizar_estados_documentos(json.load(file_state))['actual']
+                    except Exception:
+                        estado_documentos = normalizar_estados_documentos({})['actual']
+
+                    facturas_data.append({
+                        "nombre": f,
+                        "ruta": ruta_factura,
+                        "ot_content": ot_content,
+                        "badge_class": clase_b,
+                        "badge_text": texto_b,
+                        "ignorado": ignorado,
+                        "estados": estado_documentos,
+                    })
+
+        _marcar_estado_servidor(True)
+        actualizar_snapshot_facturas(_snapshot_path(), semana, facturas_data)
+        return _respuesta_datos(facturas_data, offline=False)
+    except OSError:
+        _marcar_estado_servidor(False)
+        return _respuesta_snapshot_facturas(semana)
 
 @app.route('/api/actualizar_estado_documento', methods=['POST'])
 def actualizar_estado_documento():
