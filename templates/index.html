@@ -1354,12 +1354,13 @@
             const etiqueta = `${nombresDocumentos[tipo]} ${estado}`;
             const boton = document.createElement('button');
             boton.type = 'button';
+            boton.dataset.onlineOnly = '1';
             boton.dataset.estadoControl = `${tipo}-${index}`;
             boton.className = `status-control status-${estado}`;
             boton.title = etiqueta;
             boton.setAttribute('aria-label', `${etiqueta}. Selecciona para cambiar el estado`);
             boton.setAttribute('aria-pressed', estado !== 'pendiente');
-            boton.disabled = false;
+            boton.disabled = modoOffline;
             boton.innerHTML = iconosDocumentos[tipo];
             boton.addEventListener('click', () => ciclarEstadoDocumento(index, tipo));
             return boton;
@@ -1483,6 +1484,7 @@
                     button.addEventListener('click', () => cargarFacturas(semanaObj.nombre, button));
                     const openWeek = document.createElement('button');
                     openWeek.type = 'button';
+                    openWeek.dataset.onlineOnly = '1';
                     openWeek.className = 'week-open-folder';
                     openWeek.textContent = '📂';
                     openWeek.title = 'Abrir carpeta de esta semana';
@@ -1617,7 +1619,7 @@
 
             const sync = document.querySelector(`[data-sync-index="${index}"]`);
             if (sync) {
-                sync.disabled = !!fact.ignorado;
+                sync.disabled = modoOffline || !!fact.ignorado;
                 sync.title = fact.ignorado
                     ? 'Sincronización desactivada porque esta carpeta está ignorada'
                     : 'Sincronizar pendientes. Ctrl+click o Shift+click fuerza todas las OT.';
@@ -1748,6 +1750,7 @@
 
                 const tagClose = document.createElement('button');
                 tagClose.type = 'button';
+                tagClose.dataset.onlineOnly = '1';
                 tagClose.className = 'tag-close';
                 tagClose.setAttribute('aria-label', `Eliminar código OT ${visualOT}`);
                 tagClose.textContent = '×';
@@ -1844,6 +1847,7 @@
                 folderWrapper.className = 'folder-wrapper';
                 const expander = document.createElement('button');
                 expander.type = 'button';
+                expander.dataset.onlineOnly = '1';
                 expander.className = 'folder-name';
                 expander.id = `folder_expander_${index}`;
                 expander.setAttribute('aria-expanded', 'false');
@@ -1863,6 +1867,7 @@
                 folderActions.className = 'folder-actions';
                 const openFolder = document.createElement('button');
                 openFolder.type = 'button';
+                openFolder.dataset.onlineOnly = '1';
                 openFolder.className = 'btn-open-folder';
                 openFolder.title = 'Abrir carpeta de factura en el Explorador';
                 openFolder.setAttribute('aria-label', 'Abrir carpeta de factura');
@@ -1873,6 +1878,7 @@
                 });
                 const edit = document.createElement('button');
                 edit.type = 'button';
+                edit.dataset.onlineOnly = '1';
                 edit.className = 'btn-edit';
                 edit.title = 'Renombrar carpeta';
                 edit.setAttribute('aria-label', 'Renombrar carpeta');
@@ -1880,6 +1886,7 @@
                 edit.addEventListener('click', () => renombrarCarpeta(index));
                 const remove = document.createElement('button');
                 remove.type = 'button';
+                remove.dataset.onlineOnly = '1';
                 remove.className = 'btn-delete';
                 remove.title = 'Eliminar carpeta y su contenido';
                 remove.setAttribute('aria-label', 'Eliminar carpeta y su contenido');
@@ -1899,6 +1906,7 @@
                 tagsList.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px;';
                 const input = document.createElement('input');
                 input.type = 'text';
+                input.dataset.onlineOnly = '1';
                 input.id = `ot_input_${index}`;
                 input.className = 'tag-input';
                 input.placeholder = 'Añadir código OT';
@@ -1941,6 +1949,7 @@
                 actions.className = 'acciones-flex';
                 const save = document.createElement('button');
                 save.type = 'button';
+                save.dataset.onlineOnly = '1';
                 save.className = 'btn-ghost';
                 save.title = 'Guardar códigos OT';
                 save.setAttribute('aria-label', 'Guardar códigos OT');
@@ -1948,17 +1957,19 @@
                 save.addEventListener('click', () => guardar(index));
                 const sync = document.createElement('button');
                 sync.type = 'button';
+                sync.dataset.onlineOnly = '1';
                 sync.className = 'btn-primary';
                 sync.dataset.syncIndex = String(index);
                 sync.title = fact.ignorado
                     ? 'Sincronización desactivada porque esta carpeta está ignorada'
                     : 'Sincronizar pendientes. Ctrl+click o Shift+click fuerza todas las OT.';
-                sync.disabled = fact.ignorado;
+                sync.disabled = modoOffline || fact.ignorado;
                 sync.textContent = '🔄';
                 sync.setAttribute('aria-label', sync.title);
                 sync.addEventListener('click', event => sincronizarIndividual(index, event));
                 const ignore = document.createElement('button');
                 ignore.type = 'button';
+                ignore.dataset.onlineOnly = '1';
                 ignore.className = 'btn-ghost';
                 ignore.dataset.ignoreIndex = String(index);
                 const ignoreLabel = fact.ignorado ? 'Quitar estado ignorado' : 'Marcar como ignorada';
@@ -1991,6 +2002,7 @@
                 dropCopy.append('📥 ', dropPrompt, ' o selecciona un archivo para abrirlo.');
                 const picker = document.createElement('input');
                 picker.type = 'file';
+                picker.dataset.onlineOnly = '1';
                 picker.className = 'file-picker';
                 picker.id = `file_picker_${index}`;
                 picker.setAttribute('aria-label', 'Seleccionar archivo para subir');
@@ -2008,8 +2020,9 @@
 
             tbody.replaceChildren(fragment);
             facturasActuales.forEach((fact, index) => { renderTags(index); });
+            aplicarModoOffline(modoOffline, snapshotActualizado);
             updateStats();
-            cargarRevision(false);
+            if (!modoOffline) cargarRevision(false);
             } catch (error) {
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
                 facturasActuales = [];
