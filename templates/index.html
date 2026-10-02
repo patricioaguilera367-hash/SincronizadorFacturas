@@ -938,7 +938,7 @@
                     <button class="btn-outline review-trigger" id="btnRevision" onclick="abrirModalRevision()" title="Revisar situaciones fuera de patrón">✓ Revisión</button>
                     <button class="btn-outline" onclick="abrirModoPlanilla()" title="Edita todas las carpetas en una planilla">📊 Planilla</button>
                     <button class="btn-outline" onclick="copiarTablaExcel()" id="btnCopiar" title="Copia la tabla actual al portapapeles">📋 Copiar</button>
-                    <button class="btn-master" onclick="sincronizarTodaLaSemana()" id="btnMaster">🚀 Sincronizar</button>
+                    <button class="btn-master" onclick="sincronizarTodaLaSemana(event)" id="btnMaster" title="Sincroniza pendientes. Ctrl+click o Shift+click fuerza una nueva sincronización completa.">🚀 Sincronizar</button>
                 </div>
             </div>
         </div>
@@ -1539,7 +1539,7 @@
                 sync.disabled = !!fact.ignorado;
                 sync.title = fact.ignorado
                     ? 'Sincronización desactivada porque esta carpeta está ignorada'
-                    : 'Sincronizar carpeta';
+                    : 'Sincronizar pendientes. Ctrl+click o Shift+click fuerza todas las OT.';
                 sync.setAttribute('aria-label', sync.title);
             }
 
@@ -1869,11 +1869,13 @@
                 sync.type = 'button';
                 sync.className = 'btn-primary';
                 sync.dataset.syncIndex = String(index);
-                sync.title = fact.ignorado ? 'Sincronización desactivada porque esta carpeta está ignorada' : 'Sincronizar carpeta';
+                sync.title = fact.ignorado
+                    ? 'Sincronización desactivada porque esta carpeta está ignorada'
+                    : 'Sincronizar pendientes. Ctrl+click o Shift+click fuerza todas las OT.';
                 sync.disabled = fact.ignorado;
                 sync.textContent = '🔄';
                 sync.setAttribute('aria-label', sync.title);
-                sync.addEventListener('click', () => sincronizarIndividual(index));
+                sync.addEventListener('click', event => sincronizarIndividual(index, event));
                 const ignore = document.createElement('button');
                 ignore.type = 'button';
                 ignore.className = 'btn-ghost';
@@ -2363,7 +2365,7 @@
         }
 
         async function sincronizarFacturaPorOT(index, opciones = {}) {
-            const {avisar = true, refrescarSemana = true} = opciones;
+            let {avisar = true, refrescarSemana = true, forzarTodas = false} = opciones;
             const fact = facturasActuales[index];
 
             if (fact.ignorado) {
@@ -2377,6 +2379,20 @@
                 return {ok:false, omitida:true, errores:['Sin códigos OT']};
             }
 
+            reconciliarEstadosSyncOT(index);
+            const todasVerdes = ots.every(ot => estadoSyncOt(index, ot)?.estado === 'success');
+
+            if (!forzarTodas && todasVerdes) {
+                if (!avisar) {
+                    return {ok:true, omitida:true, exitos:ots.length, total:ots.length, errores:[]};
+                }
+                const confirmar = confirm('Todas las OT ya están sincronizadas. ¿Quieres sincronizarlas todas nuevamente?');
+                if (!confirmar) {
+                    return {ok:true, omitida:true, exitos:ots.length, total:ots.length, errores:[]};
+                }
+                forzarTodas = true;
+            }
+
             const submissionKey = `sincronizar:${fact.ruta}`;
             if (!beginSubmission(submissionKey)) {
                 return {ok:false, omitida:true, errores:['Ya se está sincronizando esta carpeta']};
@@ -2386,9 +2402,9 @@
             if (syncButton) syncButton.disabled = true;
 
             const contenido = ots.join(', ');
-            reconciliarEstadosSyncOT(index);
-
-            const otsPendientes = ots.filter(ot => estadoSyncOt(index, ot)?.estado !== 'success');
+            const otsPendientes = forzarTodas
+                ? [...ots]
+                : ots.filter(ot => estadoSyncOt(index, ot)?.estado !== 'success');
             const errores = [];
             let exitos = ots.length - otsPendientes.length;
             const inicio = performance.now();
@@ -2401,7 +2417,9 @@
                         ? `Sincronizando ${exitos}/${ots.length} OT…`
                         : `Finalizando ${ots.length}/${ots.length} OT…`,
                     otsPendientes.length
-                        ? 'Las OT ya verdes se omiten; sólo se reintentan las pendientes.'
+                        ? (forzarTodas
+                            ? 'Nueva sincronización completa: se procesarán todas las OT.'
+                            : 'Las OT ya verdes se omiten; sólo se reintentan las pendientes.')
                         : 'Todas las OT ya fueron copiadas; registrando estado final.'
                 );
 
@@ -2485,12 +2503,29 @@
             }
         }
 
-        async function sincronizarIndividual(index) {
-            return sincronizarFacturaPorOT(index, {avisar:true, refrescarSemana:true});
+        async function sincronizarIndividual(index, event = null) {
+            const forzarTodas = !!(event && (event.ctrlKey || event.shiftKey));
+            if (forzarTodas) {
+                const fact = facturasActuales[index];
+                if (!confirm(`¿Sincronizar nuevamente TODAS las OT de "${fact.nombre}"?\n\nEsto volverá a copiar la carpeta a cada OT.`)) {
+                    return;
+                }
+            }
+            return sincronizarFacturaPorOT(index, {
+                avisar:true,
+                refrescarSemana:true,
+                forzarTodas
+            });
         }
 
-        async function sincronizarTodaLaSemana() {
+        async function sincronizarTodaLaSemana(event = null) {
             const semanaActual = semanaSeleccionada;
+            const forzarTodas = !!(event && (event.ctrlKey || event.shiftKey));
+
+            if (forzarTodas && !confirm('¿Forzar una nueva sincronización completa de toda la semana?\n\nSe volverán a procesar todas las OT de las carpetas no ignoradas.')) {
+                return;
+            }
+
             const submissionKey = `sincronizar-todo:${semanaActual}`;
             if (!beginSubmission(submissionKey)) return;
 
@@ -2498,7 +2533,8 @@
             facturasActuales.forEach((fact, index) => {
                 if (fact.ignorado) return;
                 const badge = document.getElementById(`status_${index}`);
-                if ((tagsData[index] || []).length > 0 && !(badge && badge.textContent.includes('✓ Sincronizado'))) {
+                const tieneOT = (tagsData[index] || []).length > 0;
+                if (tieneOT && (forzarTodas || !(badge && badge.textContent.includes('✓ Sincronizado')))) {
                     pendientes.push(index);
                 }
             });
@@ -2519,7 +2555,8 @@
                     const index = pendientes[i];
                     const resultado = await sincronizarFacturaPorOT(index, {
                         avisar:false,
-                        refrescarSemana:false
+                        refrescarSemana:false,
+                        forzarTodas
                     });
                     if (!resultado.ok && !resultado.omitida) {
                         problemas.push(...(resultado.errores || []));
