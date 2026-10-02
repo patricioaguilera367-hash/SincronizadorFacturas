@@ -2345,82 +2345,164 @@
             }
         }
 
-        async function sincronizarIndividual(index) {
+        async function sincronizarFacturaPorOT(index, opciones = {}) {
+            const {avisar = true, refrescarSemana = true} = opciones;
             const fact = facturasActuales[index];
+
             if (fact.ignorado) {
-                alert('Esta carpeta está ignorada para sincronización. Puedes seguir editando OT, estados y archivos.');
-                return;
+                if (avisar) alert('Esta carpeta está ignorada para sincronización. Puedes seguir editando OT, estados y archivos.');
+                return {ok:false, omitida:true, errores:['Carpeta ignorada']};
             }
-            const contenido = document.getElementById(`ot_${index}`).value;
-            if(!contenido.trim()) { alert("Añade al menos un código OT antes de sincronizar."); return; }
+
+            const ots = [...(tagsData[index] || [])];
+            if (!ots.length) {
+                if (avisar) alert('Añade al menos un código OT antes de sincronizar.');
+                return {ok:false, omitida:true, errores:['Sin códigos OT']};
+            }
+
             const submissionKey = `sincronizar:${fact.ruta}`;
-            if (!beginSubmission(submissionKey)) return;
+            if (!beginSubmission(submissionKey)) {
+                return {ok:false, omitida:true, errores:['Ya se está sincronizando esta carpeta']};
+            }
+
+            const syncButton = document.querySelector(`[data-sync-index="${index}"]`);
+            if (syncButton) syncButton.disabled = true;
+
+            const contenido = ots.join(', ');
+            const errores = [];
+            let exitos = 0;
             const inicio = performance.now();
-            setStatus(index, 'loading', 'Validando códigos OT y buscando carpeta...', 'Validación, búsqueda, creación de carpeta y transferencia en curso.');
+
             try {
-                const res = await fetchConTimeout('/api/sincronizar', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ ruta: fact.ruta, nombre: fact.nombre, contenido: contenido })
-                });
-                const data = await respuestaJson(res, 'No se pudo sincronizar.');
-                const duracionSegundos = ((performance.now() - inicio) / 1000).toFixed(1);
-                if(data.status === "ok") setStatus(index, 'success', `✓ Sincronizado en ${duracionSegundos}s`, 'Validación, búsqueda, creación de carpeta y transferencia completadas.');
-                else if (data.status === "warning") {
-                    alert("Sincronización con avisos:\n" + (data.errores || []).join("\n"));
-                    setStatus(index, 'warning', '⚠ Requiere revisión', (data.errores || []).join(" | "));
-                } else setStatus(index, 'danger', '❌ No se pudo sincronizar', data.mensaje || (data.errores || []).join(" | ") || 'Inténtalo de nuevo.');
+                setStatus(index, 'loading', `Sincronizando 0/${ots.length} OT…`, 'Cada OT se procesa por separado.');
+
+                for (let pos = 0; pos < ots.length; pos++) {
+                    const ot = ots[pos];
+                    setEstadoSyncOT(index, ot, 'running', 'Sincronizando esta OT…');
+
+                    try {
+                        const res = await fetchConTimeout('/api/sincronizar_ot', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                ruta: fact.ruta,
+                                nombre: fact.nombre,
+                                contenido,
+                                ot
+                            })
+                        }, 90000);
+
+                        const data = await respuestaJson(res, `No se pudo sincronizar ${formatVisualOT(ot)}.`);
+                        if (data.status === 'ok') {
+                            exitos++;
+                            setEstadoSyncOT(index, ot, 'success', 'OT sincronizada correctamente.');
+                        } else {
+                            const detalle = data.mensaje || (data.errores || []).join(' | ') || 'No se pudo sincronizar esta OT.';
+                            errores.push(`${formatVisualOT(ot)}: ${detalle}`);
+                            setEstadoSyncOT(index, ot, 'error', detalle);
+                        }
+                    } catch (error) {
+                        const detalle = error.message || 'No se pudo sincronizar esta OT.';
+                        errores.push(`${formatVisualOT(ot)}: ${detalle}`);
+                        setEstadoSyncOT(index, ot, 'error', detalle);
+                    }
+
+                    setStatus(
+                        index,
+                        'loading',
+                        `Sincronizando ${pos + 1}/${ots.length} OT…`,
+                        `${exitos} completada(s), ${errores.length} con problema(s).`
+                    );
+                }
+
+                if (errores.length === 0) {
+                    const finalizar = await fetchConTimeout('/api/finalizar_sincronizacion', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            ruta: fact.ruta,
+                            nombre: fact.nombre,
+                            contenido
+                        })
+                    }, 30000);
+                    const resultadoFinal = await respuestaJson(finalizar, 'Las OT se copiaron, pero no se pudo registrar el estado final.');
+                    if (resultadoFinal.status !== 'ok') {
+                        throw new Error(resultadoFinal.mensaje || 'No se pudo registrar el estado final.');
+                    }
+
+                    const duracionSegundos = ((performance.now() - inicio) / 1000).toFixed(1);
+                    setStatus(
+                        index,
+                        'success',
+                        `✓ Sincronizado en ${duracionSegundos}s`,
+                        `${ots.length}/${ots.length} OT sincronizadas correctamente.`
+                    );
+                    return {ok:true, exitos:ots.length, total:ots.length, errores:[]};
+                }
+
+                const mensaje = `⚠ ${exitos}/${ots.length} OT sincronizadas`;
+                setStatus(index, 'warning', mensaje, errores.join(' | '));
+                if (avisar) alert('Sincronización parcial:\n\n' + errores.join('\n'));
+                return {ok:false, exitos, total:ots.length, errores};
             } catch (error) {
-                setStatus(index, 'danger', '❌ No se pudo sincronizar', error.message || 'Inténtalo de nuevo.');
+                const detalle = error.message || 'No se pudo completar la sincronización.';
+                setStatus(index, 'danger', '❌ No se pudo finalizar', detalle);
+                if (avisar) alert(detalle);
+                return {ok:false, exitos, total:ots.length, errores:[detalle]};
             } finally {
                 endSubmission(submissionKey);
-                initSemanas(true);
+                if (syncButton) syncButton.disabled = !!fact.ignorado;
+                if (refrescarSemana) initSemanas(true);
             }
+        }
+
+        async function sincronizarIndividual(index) {
+            return sincronizarFacturaPorOT(index, {avisar:true, refrescarSemana:true});
         }
 
         async function sincronizarTodaLaSemana() {
             const semanaActual = semanaSeleccionada;
             const submissionKey = `sincronizar-todo:${semanaActual}`;
             if (!beginSubmission(submissionKey)) return;
-            const payloadBatch = [];
+
+            const pendientes = [];
             facturasActuales.forEach((fact, index) => {
                 if (fact.ignorado) return;
-                const contenido = document.getElementById(`ot_${index}`).value;
-                const badge = document.getElementById(`status_${index}`).textContent;
-                if(contenido.trim() !== "" && !badge.includes("✓ Sincronizado")) {
-                    setStatus(index, 'loading', 'Validando códigos OT y buscando carpeta...', 'Validación, búsqueda, creación de carpeta y transferencia en curso.');
-                    payloadBatch.push({ index: index, ruta: fact.ruta, nombre: fact.nombre, contenido: contenido });
+                const badge = document.getElementById(`status_${index}`);
+                if ((tagsData[index] || []).length > 0 && !(badge && badge.textContent.includes('✓ Sincronizado'))) {
+                    pendientes.push(index);
                 }
             });
-            if(payloadBatch.length === 0) {
+
+            if (!pendientes.length) {
                 endSubmission(submissionKey);
-                alert("No hay carpetas con códigos OT pendientes de sincronización.");
+                alert('No hay carpetas con códigos OT pendientes de sincronización.');
                 return;
             }
 
-            const btn = document.getElementById("btnMaster");
+            const btn = document.getElementById('btnMaster');
             btn.disabled = true;
-            btn.innerHTML = "⏳ Sincronizando…";
-            const inicio = performance.now();
+            const problemas = [];
+
             try {
-                const res = await fetchConTimeout('/api/sincronizar_todo', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payloadBatch)
-                });
-                const data = await respuestaJson(res, 'No se pudo sincronizar la semana.');
-                if (!Array.isArray(data.resultados)) throw new Error('No se pudo sincronizar la semana.');
-                const duracionSegundos = ((performance.now() - inicio) / 1000).toFixed(1);
-                data.resultados.forEach(resItem => {
-                    if(resItem.status === "ok") setStatus(resItem.index, 'success', `✓ Sincronizado en ${duracionSegundos}s`, 'Validación, búsqueda, creación de carpeta y transferencia completadas.');
-                    else if (resItem.status === "warning") setStatus(resItem.index, 'warning', '⚠ Requiere revisión', (resItem.errores || []).join(" | "));
-                    else setStatus(resItem.index, 'danger', '❌ No se pudo sincronizar', resItem.mensaje || (resItem.errores || []).join(" | ") || 'Inténtalo de nuevo.');
-                });
-            } catch (error) {
-                const detalle = error.message || 'Inténtalo de nuevo.';
-                payloadBatch.forEach(item => setStatus(item.index, 'danger', '❌ No se pudo sincronizar', detalle));
-                alert(`No se pudo sincronizar la semana. ${detalle}`);
+                for (let i = 0; i < pendientes.length; i++) {
+                    btn.textContent = `⏳ ${i + 1}/${pendientes.length}`;
+                    const index = pendientes[i];
+                    const resultado = await sincronizarFacturaPorOT(index, {
+                        avisar:false,
+                        refrescarSemana:false
+                    });
+                    if (!resultado.ok && !resultado.omitida) {
+                        problemas.push(...(resultado.errores || []));
+                    }
+                }
+
+                if (problemas.length) {
+                    alert('La semana terminó con algunas OT pendientes de revisión:\n\n' + problemas.join('\n'));
+                }
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = "🚀 Sincronizar";
+                btn.innerHTML = '🚀 Sincronizar';
                 endSubmission(submissionKey);
                 initSemanas(true);
             }
