@@ -734,6 +734,7 @@ def _resolver_rutas_ot(ot, cache_obras=None):
 
     ot_clean = normalizar_codigo_ot(ot)
     encontradas = []
+    coincidencia_inaccesible = False
     for relativa in carpetas_obras:
         nombre_carpeta = os.path.basename(relativa)
         if not coincide_codigo_ot(nombre_carpeta, ot_clean):
@@ -744,7 +745,13 @@ def _resolver_rutas_ot(ot, cache_obras=None):
             continue
         try:
             os.stat(destino_base)
+        except FileNotFoundError:
+            continue
         except OSError:
+            # La búsqueda sí encontró una carpeta cuyo nombre coincide con la
+            # OT, pero Windows/SMB no permitió consultar sus metadatos. Esto no
+            # es equivalente a "OT no encontrada".
+            coincidencia_inaccesible = True
             continue
         if not os.path.isdir(destino_base):
             continue
@@ -755,6 +762,9 @@ def _resolver_rutas_ot(ot, cache_obras=None):
     if encontradas:
         _marcar_estado_servidor(True)
         return {'status': 'ok', 'rutas': encontradas, 'historica': bool(historicos)}
+
+    if coincidencia_inaccesible or acceso_denegado:
+        return {'status': 'denied', 'rutas': [], 'historica': bool(historicos)}
 
     # Sólo una búsqueda recursiva completada correctamente permite afirmar que
     # una ruta histórica ya no está. Una caída de red nunca borra ese historial.
@@ -1126,6 +1136,13 @@ def _sincronizar_una_ot(origen, factura_nombre, ot, cache_obras=None):
             "status": "error",
             "mensaje": "No se pudo acceder a las carpetas de obras.",
             "errores": [],
+        }
+
+    if resolucion.get('status') == 'denied':
+        return {
+            "ot": ot,
+            "status": "warning",
+            "errores": [f"No se pudo acceder a la carpeta de la OT {ot}."],
         }
 
     if resolucion.get('status') != 'ok' or not resolucion.get('rutas'):
