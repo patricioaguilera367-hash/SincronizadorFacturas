@@ -1284,6 +1284,7 @@
         }
 
         async function abrirModalRevision() {
+            if (modoOffline) return;
             if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
             document.getElementById('modalRevision').style.display='flex';
             renderRevision(revisionActual);
@@ -1378,6 +1379,7 @@
         }
 
         async function ciclarEstadoDocumento(index, tipo) {
+            if (modoOffline) return;
             const fact = facturasActuales[index];
             const opciones = estadosDocumentos[tipo];
             const siguiente = opciones[(opciones.indexOf(estadoDocumento(fact, tipo)) + 1) % opciones.length];
@@ -1534,6 +1536,7 @@
         }
 
         async function crearNuevaSemana() {
+            if (modoOffline) return;
             if(!confirm("¿Crear la carpeta de la próxima semana?")) return;
             const submissionKey = 'nueva-semana';
             if (!beginSubmission(submissionKey)) return;
@@ -1554,6 +1557,7 @@
         }
 
         async function crearNuevaFactura() {
+            if (modoOffline) return;
             const semanaActual = semanaSeleccionada;
             const nombre = prompt("Nombre de la nueva carpeta:");
             if(!nombre || nombre.trim() === "" || !semanaActual) return;
@@ -1574,6 +1578,7 @@
         }
 
         async function eliminarCarpeta(index) {
+            if (modoOffline) return;
             const fact = facturasActuales[index];
             if(!confirm(`⚠️ Eliminar la carpeta "${fact.nombre}" y todo su contenido? Esta acción no se puede deshacer.`)) return;
             const submissionKey = `eliminar:${fact.ruta}`;
@@ -1594,6 +1599,7 @@
         }
 
         async function renombrarCarpeta(index) {
+            if (modoOffline) return;
             const fact = facturasActuales[index];
             const nuevoNombre = prompt("Nuevo nombre de la carpeta de factura:", fact.nombre);
             if (nuevoNombre === null || nuevoNombre.trim() === "" || nuevoNombre.trim() === fact.nombre) return;
@@ -1642,6 +1648,7 @@
         }
 
         async function toggleIgnorar(index) {
+            if (modoOffline) return;
             const fact = facturasActuales[index];
             const submissionKey = `ignorar:${fact.ruta}`;
             if (!beginSubmission(submissionKey)) return;
@@ -2151,6 +2158,7 @@
         document.addEventListener('keydown', manejarTecladoPlanilla);
 
         function abrirModoPlanilla() {
+            if (modoOffline) return;
             if (facturasActuales.length === 0) { alert("Selecciona una semana antes de abrir la planilla."); return; }
             ultimoFocoPlanilla = document.activeElement;
             let maxOts = 0;
@@ -2336,6 +2344,7 @@
         }
 
         function toggleArchivos(index, ruta) {
+            if (modoOffline) return;
             const row = document.getElementById(`archivos_row_${index}`);
             const expander = document.getElementById(`folder_expander_${index}`);
             const opening = row.style.display !== "table-row";
@@ -2402,6 +2411,7 @@
         function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
         function handleDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
         async function handleDrop(e, index, ruta) {
+            if (modoOffline) return;
             const dropZone = document.getElementById(`drop_zone_${index}`);
             e.preventDefault();
             dropZone.classList.remove('dragover');
@@ -2437,6 +2447,7 @@
         }
 
         async function guardar(index) {
+            if (modoOffline) return;
             const fact = facturasActuales[index];
             const submissionKey = `guardar:${fact.ruta}`;
             if (!beginSubmission(submissionKey)) return;
@@ -2459,6 +2470,7 @@
         }
 
         async function sincronizarFacturaPorOT(index, opciones = {}) {
+            if (modoOffline) return {ok:false, omitida:true, errores:['Modo sin conexión']};
             let {avisar = true, refrescarSemana = true, forzarTodas = false} = opciones;
             const fact = facturasActuales[index];
 
@@ -2613,6 +2625,7 @@
         }
 
         async function sincronizarTodaLaSemana(event = null) {
+            if (modoOffline) return;
             const semanaActual = semanaSeleccionada;
             const forzarTodas = !!(event && (event.ctrlKey || event.shiftKey));
 
@@ -2772,6 +2785,7 @@
             cerrarFormularioCobro();
         }
         async function abrirModalMontos() {
+            if (modoOffline) return;
             if (!semanaSeleccionada) { alert('Selecciona una semana primero.'); return; }
             document.getElementById('modalMontos').style.display='flex';
             aplicarVisibilidadOT();
