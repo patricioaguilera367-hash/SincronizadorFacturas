@@ -155,25 +155,28 @@ class InteractionPolishTests(unittest.TestCase):
         self.assert_source_contains('updateWithViewTransition(() => {')
         self.assert_source_contains("elementoLista.classList.add('active')")
 
-    def test_view_transition_is_optional_reduced_and_interruptible(self):
-        self.assert_source_contains('typeof document.startViewTransition === "function"')
-        self.assert_source_contains('window.matchMedia("(prefers-reduced-motion: reduce)").matches')
-        self.assert_source_contains('pendingTransition.skipTransition()')
-        self.assert_source_contains('revision !== viewTransitionRevision')
-        self.assert_source_contains('transition.finished.then(finish, finish)')
-        self.assert_source_contains('source.style.viewTransitionName = ""')
-        self.assert_source_contains('target.style.viewTransitionName = options.name')
+    def test_view_transition_helper_is_intentionally_synchronous(self):
+        helper = self.source.split(
+            "function updateWithViewTransition(updateDOM) {", 1
+        )[1].split('document.addEventListener("DOMContentLoaded"', 1)[0]
+        self.assertIn("updateDOM();", helper)
+        self.assertIn("return false;", helper)
+        self.assertNotIn("document.startViewTransition", helper)
+        self.assertNotIn("skipTransition", helper)
 
-    def test_folder_detail_name_moves_with_sync_dom_only_disclosure(self):
-        self.assert_source_contains('name: "folder-detail"')
-        self.assert_source_contains('source: opening ? expander : row')
-        self.assert_source_contains('target: opening ? row : expander')
-        self.assert_source_contains('suppressEntry: opening ? row : null')
-        toggle = self.source.split('function toggleArchivos(index, ruta) {', 1)[1].split('async function cargarListaArchivos', 1)[0]
+    def test_folder_detail_disclosure_updates_before_async_file_load(self):
+        toggle = self.source.split(
+            'function toggleArchivos(index, ruta) {', 1
+        )[1].split('async function cargarListaArchivos', 1)[0]
         self.assertNotIn('await ', toggle)
-        self.assertLess(toggle.index('updateWithViewTransition'), toggle.index('cargarListaArchivos(index, ruta)'))
-        self.assert_source_contains('.archivos-row.view-transition-active .archivos-container { animation: none; }')
-        self.assert_source_contains('suppressEntry.classList.add("view-transition-active")')
+        self.assertIn('updateWithViewTransition(() => {', toggle)
+        self.assertLess(
+            toggle.index('updateWithViewTransition'),
+            toggle.index('cargarListaArchivos(index, ruta)'),
+        )
+        self.assertIn('expander.setAttribute("aria-expanded", "false")', toggle)
+        self.assertIn('expander.setAttribute("aria-expanded", "true")', toggle)
+        self.assertIn('if (modoOffline) return;', toggle)
 
     def test_view_transition_limits_choreography_to_named_elements_and_documents_it(self):
         self.assert_source_contains('::view-transition-old(root), ::view-transition-new(root) { animation: none; }')
