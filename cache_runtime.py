@@ -263,7 +263,7 @@ def reconciliar_indice_raiz(path_indice, base_obras):
                     continue
                 if relativa.lower() in presentes:
                     continue
-                if estado.get("estado") == "activa":
+                if estado.get("estado") in {"activa", "sin_verificar"}:
                     estado["estado"] = "ausente"
                     estado["ausente_desde"] = estado.get("ausente_desde") or momento
                     ausentes += 1
