@@ -285,6 +285,29 @@ def estado_runtime():
     })
 
 
+def _servidor_marcado_offline():
+    with _CACHE_STATE_LOCK:
+        return (
+            _SERVER_STATE.get('root') == BASE_OBRAS
+            and _SERVER_STATE.get('online') is False
+        )
+
+
+@app.before_request
+def bloquear_escrituras_en_snapshot():
+    if not request.path.startswith('/api/'):
+        return None
+    if request.method in {'GET', 'HEAD', 'OPTIONS'}:
+        return None
+    if not _servidor_marcado_offline():
+        return None
+
+    return jsonify({
+        'error': 'Modo sin conexión: el snapshot local es sólo de lectura.',
+        'offline': True,
+    }), 503
+
+
 FERIADOS_VIERNES = [
     date(2026, 4, 3), date(2026, 5, 1), date(2026, 9, 18), 
     date(2026, 12, 25), date(2027, 1, 1), date(2027, 3, 26)
@@ -1259,4 +1282,5 @@ registrar_rutas_cobros(app, BASE_FACTURAS, ruta_aprobada)
 registrar_rutas_revision(app, BASE_FACTURAS, ruta_aprobada)
 
 if __name__ == '__main__':
+    _iniciar_cache_background()
     app.run(host=APP_HOST, debug=False, use_reloader=False, port=APP_PORT)
