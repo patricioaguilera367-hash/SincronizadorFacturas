@@ -198,6 +198,22 @@
             to { opacity: 1; transform: translateY(0); }
         }
         @keyframes scrim-enter { from { opacity: 0; } to { opacity: 1; } }
+        .tag.sync-running { background: var(--status-warning-bg); color: var(--status-warning-text); }
+        .tag.sync-success { background: var(--status-success-bg); color: var(--status-success-text); }
+        .tag.sync-error { background: var(--status-danger-bg); color: var(--status-danger-text); }
+        .tag-sync-indicator {
+            display: inline-flex;
+            width: 13px;
+            height: 13px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-size: .58rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .tag.sync-running .tag-sync-indicator { animation: sync-pulse .8s ease-in-out infinite alternate; }
+        @keyframes sync-pulse { from { opacity: .35; } to { opacity: 1; } }
         .tag-close { cursor: pointer; font: inherit; font-weight: bold; color: inherit; background: transparent; border: 0; padding: 0; opacity: 0.8; transition: opacity 0.18s ease, color 0.18s ease; }
         .tag-close:hover { opacity: 1; color: var(--action-text); }
         .tag-input { border: none; outline: none; background: transparent; flex-grow: 1; min-width: 120px; font-family: inherit; color: var(--text-main); }
@@ -1052,7 +1068,8 @@
 
     <script>
         let facturasActuales = [];
-        let tagsData = {}; 
+        let tagsData = {};
+        let estadosSyncOT = {};
         let columnasPlanilla = 5; 
         let semanaSeleccionada = '';
         let carpetaSeleccionada = '';
@@ -1080,7 +1097,10 @@
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
             try { return await fetch(url, { ...options, signal: controller.signal }); }
             catch (error) {
-                if (error.name === 'AbortError') throw new Error('La sincronización superó los 30 segundos. Inténtalo nuevamente.');
+                if (error.name === 'AbortError') {
+                    const segundos = Math.round(timeoutMs / 1000);
+                    throw new Error(`La operación superó los ${segundos} segundos. Inténtalo nuevamente.`);
+                }
                 throw error;
             } finally { clearTimeout(timeout); }
         }
@@ -1293,6 +1313,7 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'No se pudo guardar el estado.');
                 fact.estados = data.estados;
+                limpiarEstadosSyncOT(index);
                 actualizarControlDocumento(index, tipo);
                 if (data.badge_class) {
                     const badge = document.getElementById(`status_${index}`);
@@ -1577,38 +1598,79 @@
             return results;
         }
 
+        function estadoSyncOt(index, ot) {
+            return estadosSyncOT[index] && estadosSyncOT[index][ot]
+                ? estadosSyncOT[index][ot]
+                : null;
+        }
+
+        function setEstadoSyncOT(index, ot, estado, mensaje = '') {
+            if (!estadosSyncOT[index]) estadosSyncOT[index] = {};
+            estadosSyncOT[index][ot] = {estado, mensaje};
+            renderTags(index);
+        }
+
+        function limpiarEstadosSyncOT(index) {
+            if (!estadosSyncOT[index] || Object.keys(estadosSyncOT[index]).length === 0) return;
+            estadosSyncOT[index] = {};
+            renderTags(index);
+        }
+
         function renderTags(index) {
             const listDiv = document.getElementById(`tags_list_${index}`);
+            if (!listDiv) return;
+
             const fragment = document.createDocumentFragment();
-            tagsData[index].forEach(ot => {
+            (tagsData[index] || []).forEach(ot => {
                 const visualOT = formatVisualOT(ot);
+                const syncState = estadoSyncOt(index, ot);
                 const tag = document.createElement('span');
-                tag.className = 'tag ctrl-open';
-                tag.textContent = `${visualOT} `;
-                tag.title = 'Ctrl + click para abrir la carpeta de esta OT';
+                tag.className = 'tag ctrl-open' + (syncState ? ` sync-${syncState.estado}` : '');
+
+                const label = document.createElement('span');
+                label.textContent = visualOT;
+                tag.appendChild(label);
+
+                if (syncState) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'tag-sync-indicator';
+                    indicator.textContent =
+                        syncState.estado === 'success' ? '✓' :
+                        syncState.estado === 'error' ? '!' : '…';
+                    tag.appendChild(indicator);
+                }
+
+                tag.title = syncState?.mensaje
+                    ? `${syncState.mensaje}\nCtrl + click para abrir la carpeta de esta OT`
+                    : 'Ctrl + click para abrir la carpeta de esta OT';
+
                 tag.addEventListener('click', event => {
                     if (!(event.ctrlKey || event.metaKey)) return;
                     event.preventDefault();
                     event.stopPropagation();
                     abrirCarpeta('ot', {ot});
                 });
+
                 const tagClose = document.createElement('button');
                 tagClose.type = 'button';
                 tagClose.className = 'tag-close';
-                tagClose.setAttribute('aria-label', `Eliminar c\u00f3digo OT ${visualOT}`);
+                tagClose.setAttribute('aria-label', `Eliminar código OT ${visualOT}`);
                 tagClose.textContent = '×';
                 tagClose.addEventListener('click', event => removeTag(event, index, ot));
                 tag.appendChild(tagClose);
                 fragment.appendChild(tag);
             });
+
             listDiv.replaceChildren(fragment);
-            document.getElementById(`ot_${index}`).value = tagsData[index].join(', ');
+            const hidden = document.getElementById(`ot_${index}`);
+            if (hidden) hidden.value = (tagsData[index] || []).join(', ');
             updateStats();
         }
 
         function removeTag(event, index, otToRemove) {
             event.stopPropagation();
             tagsData[index] = tagsData[index].filter(v => v !== otToRemove);
+            if (estadosSyncOT[index]) delete estadosSyncOT[index][otToRemove];
             renderTags(index);
             marcarComoDesactualizado(index);
         }
@@ -1661,6 +1723,7 @@
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
                 facturasActuales = facturas;
                 tagsData = {};
+                estadosSyncOT = {};
                 if (facturasActuales.length === 0) {
                     mostrarEstadoTabla('Esta semana no contiene carpetas de factura.');
                     updateStats();
@@ -1672,6 +1735,12 @@
 
             facturasActuales.forEach((fact, index) => {
                 tagsData[index] = fact.ot_content.split(',').map(s => s.trim()).filter(s => s);
+                estadosSyncOT[index] = {};
+                if (fact.badge_class === 'badge-success') {
+                    tagsData[index].forEach(ot => {
+                        estadosSyncOT[index][ot] = {estado: 'success', mensaje: 'OT sincronizada'};
+                    });
+                }
 
                 const row = document.createElement('tr');
                 const folderCell = document.createElement('td');
@@ -2146,6 +2215,7 @@
         }
 
         function marcarComoDesactualizado(index) {
+            limpiarEstadosSyncOT(index);
             const badge = document.getElementById(`status_${index}`);
             if (badge && badge.textContent.includes("✓ Sincronizado")) {
                 setStatus(index, "danger", "⚠ Código OT modificado");
@@ -2241,6 +2311,7 @@
                 dropZone.classList.add('uploaded');
                 setTimeout(() => dropZone.classList.remove('uploaded'), 1200);
                 cargarListaArchivos(index, ruta);
+                limpiarEstadosSyncOT(index);
                 setStatus(index, 'danger', '⚠ Archivo agregado');
                 initSemanas(true);
                 cargarRevision(false);
@@ -2257,6 +2328,7 @@
             const submissionKey = `guardar:${fact.ruta}`;
             if (!beginSubmission(submissionKey)) return;
             const contenido = document.getElementById(`ot_${index}`).value;
+            limpiarEstadosSyncOT(index);
             setStatus(index, 'loading', 'Guardando...');
             try {
                 const res = await fetch('/api/guardar', {
