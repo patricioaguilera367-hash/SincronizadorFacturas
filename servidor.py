@@ -727,21 +727,196 @@ def sincronizar_todo():
             resultados.append({"index": fact['index'], "status": res['status'], "errores": errores})
     return jsonify({"resultados": resultados})
 
-@app.route('/api/sincronizar', methods=['POST'])
-def sincronizar(): return procesar_sincronizacion(request.json)
+def _sincronizar_una_ot(origen, factura_nombre, ot, cache_obras=None):
+    """Sincroniza una sola OT y devuelve un resultado granular."""
+    cache_obras = cache_obras if cache_obras is not None else {}
+    sincronizada = False
+    fallo_copia = False
+    ot_encontrada = False
+    metadata_denegada = False
 
-def procesar_sincronizacion(data, cache_obras=None):
+    candidatos_directos = [normalizar_codigo_ot(ot).upper()]
+    if componente_aprobado(ot):
+        candidatos_directos.append(ot)
+
+    for candidato in dict.fromkeys(candidatos_directos):
+        destino_base = ruta_aprobada(BASE_OBRAS, candidato)
+        if not destino_base:
+            continue
+        try:
+            os.stat(destino_base)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            ot_encontrada = True
+            metadata_denegada = True
+            continue
+
+        if not os.path.isdir(destino_base):
+            continue
+
+        ot_encontrada = True
+        destino_final = ruta_aprobada(destino_base, "Pensiones y almuerzos", factura_nombre)
+        if destino_final:
+            try:
+                sincronizar_carpetas_python(origen, destino_final)
+                sincronizada = True
+                break
+            except Exception:
+                fallo_copia = True
+
+    if not sincronizada:
+        if 'carpetas' not in cache_obras:
+            cache_obras['carpetas'] = listar_carpetas_obras(
+                cache_obras.get('ots_pendientes', [ot])
+            )
+
+        carpetas_obras = cache_obras['carpetas']
+        if carpetas_obras is None:
+            return {
+                "ot": ot,
+                "status": "error",
+                "mensaje": "No se pudo acceder a las carpetas de obras.",
+                "errores": [],
+            }
+
+        ot_clean = normalizar_codigo_ot(ot)
+        for c in carpetas_obras:
+            nombre_carpeta = os.path.basename(c)
+            if not coincide_codigo_ot(nombre_carpeta, ot_clean):
+                continue
+
+            ot_encontrada = True
+            destino_base = ruta_aprobada(BASE_OBRAS, *c.split(os.sep))
+            if not destino_base:
+                continue
+            try:
+                os.stat(destino_base)
+            except OSError:
+                continue
+            if not os.path.isdir(destino_base):
+                continue
+
+            destino_final = ruta_aprobada(destino_base, "Pensiones y almuerzos", factura_nombre)
+            if not destino_final:
+                continue
+
+            try:
+                sincronizar_carpetas_python(origen, destino_final)
+                sincronizada = True
+                break
+            except Exception:
+                fallo_copia = True
+
+    if sincronizada:
+        return {"ot": ot, "status": "ok", "errores": []}
+
+    if fallo_copia:
+        error = f"No se pudo copiar la carpeta de factura en la OT {ot}."
+    elif ot_encontrada:
+        sufijo = "." if metadata_denegada else " en obras."
+        error = f"No se pudo acceder a la carpeta de la OT {ot}{sufijo}"
+    else:
+        error = f"La OT {ot} no existe en obras."
+
+    return {"ot": ot, "status": "warning", "errores": [error]}
+
+
+def _validar_sync_no_ignorada(data):
     data = datos_sincronizacion_aprobados(data)
-    if not data: return error_ruta_invalida()
-    origen, factura_nombre = data['ruta'], data['nombre']
+    if not data:
+        return None, error_ruta_invalida()
+
+    origen = data['ruta']
     ignorado_path = ruta_aprobada(origen, 'ignorado.txt')
     if ignorado_path and os.path.exists(ignorado_path):
+        return None, (
+            jsonify({
+                "status": "error",
+                "mensaje": "Esta carpeta está ignorada para sincronización."
+            }),
+            409,
+        )
+
+    return data, None
+
+
+@app.route('/api/sincronizar_ot', methods=['POST'])
+def sincronizar_ot():
+    data, error = _validar_sync_no_ignorada(request.json)
+    if error:
+        return error
+
+    ot_solicitada = (request.json or {}).get('ot')
+    if not isinstance(ot_solicitada, str) or not ot_solicitada.strip():
+        return error_ruta_invalida()
+
+    origen, factura_nombre = data['ruta'], data['nombre']
+    ots = [ot.strip() for ot in data.get('contenido', '').split(',') if ot.strip()]
+    normalizada = normalizar_codigo_ot(ot_solicitada)
+    ot = next((item for item in ots if normalizar_codigo_ot(item) == normalizada), None)
+    if not ot:
+        return jsonify({"error": "La OT solicitada no pertenece a la carpeta."}), 400
+
+    # Persistimos la lista completa, nunca una OT aislada.
+    try:
+        guardar_ot_metadata(origen, data['contenido'])
+    except Exception:
+        return jsonify({"status": "error", "mensaje": "No se pudieron guardar los codigos OT."})
+
+    try:
+        resultado = _sincronizar_una_ot(
+            origen,
+            factura_nombre,
+            ot,
+            {"ots_pendientes": {normalizar_codigo_ot(ot)}},
+        )
+        return jsonify(resultado)
+    except Exception:
+        return jsonify({
+            "ot": ot,
+            "status": "error",
+            "mensaje": "No se pudo completar la sincronización de esta OT.",
+            "errores": [],
+        })
+
+
+@app.route('/api/finalizar_sincronizacion', methods=['POST'])
+def finalizar_sincronizacion():
+    data, error = _validar_sync_no_ignorada(request.json)
+    if error:
+        return error
+
+    origen = data['ruta']
+    ots = [ot.strip() for ot in data.get('contenido', '').split(',') if ot.strip()]
+    if not ots:
+        return jsonify({"error": "No hay códigos OT para registrar."}), 400
+
+    try:
+        guardar_ot_metadata(origen, data['contenido'])
+        actualizar_estado_sync(origen, ots)
+    except Exception:
         return jsonify({
             "status": "error",
-            "mensaje": "Esta carpeta está ignorada para sincronización."
-        }), 409
+            "mensaje": "No se pudo registrar el estado de sincronizacion."
+        })
 
+    return jsonify({"status": "ok"})
+
+
+@app.route('/api/sincronizar', methods=['POST'])
+def sincronizar():
+    return procesar_sincronizacion(request.json)
+
+
+def procesar_sincronizacion(data, cache_obras=None):
+    data, error = _validar_sync_no_ignorada(data)
+    if error:
+        return error
+
+    origen, factura_nombre = data['ruta'], data['nombre']
     ots = [ot.strip() for ot in data.get('contenido', '').split(',') if ot.strip()]
+
     try:
         guardar_ot_metadata(origen, data['contenido'])
     except Exception:
@@ -749,74 +924,28 @@ def procesar_sincronizacion(data, cache_obras=None):
 
     cache_obras = cache_obras if cache_obras is not None else {}
     errores = []
+
     try:
         for ot in ots:
-            sincronizada = False
-            fallo_copia = False
-            ot_encontrada = False
-            metadata_denegada = False
-            candidatos_directos = [normalizar_codigo_ot(ot).upper()]
-            if componente_aprobado(ot): candidatos_directos.append(ot)
-            for candidato in dict.fromkeys(candidatos_directos):
-                destino_base = ruta_aprobada(BASE_OBRAS, candidato)
-                if not destino_base: continue
-                try:
-                    os.stat(destino_base)
-                except FileNotFoundError:
-                    continue
-                except OSError:
-                    ot_encontrada = True
-                    metadata_denegada = True
-                    continue
-                if not os.path.isdir(destino_base): continue
-                ot_encontrada = True
-                destino_final = ruta_aprobada(destino_base, "Pensiones y almuerzos", factura_nombre)
-                if destino_final:
-                    try:
-                        sincronizar_carpetas_python(origen, destino_final)
-                        sincronizada = True
-                        break
-                    except Exception:
-                        fallo_copia = True
-            if not sincronizada:
-                if 'carpetas' not in cache_obras:
-                    cache_obras['carpetas'] = listar_carpetas_obras(cache_obras.get('ots_pendientes', [ot]))
-                carpetas_obras = cache_obras['carpetas']
-                if carpetas_obras is None:
-                    return jsonify({"status": "error", "mensaje": "No se pudo acceder a las carpetas de obras."})
-                ot_clean = normalizar_codigo_ot(ot)
-                for c in carpetas_obras:
-                    nombre_carpeta = os.path.basename(c)
-                    if not coincide_codigo_ot(nombre_carpeta, ot_clean): continue
-                    ot_encontrada = True
-                    destino_base = ruta_aprobada(BASE_OBRAS, *c.split(os.sep))
-                    if not destino_base: continue
-                    try:
-                        os.stat(destino_base)
-                    except OSError:
-                        continue
-                    if not os.path.isdir(destino_base): continue
-                    destino_final = ruta_aprobada(destino_base, "Pensiones y almuerzos", factura_nombre)
-                    if not destino_final: continue
-                    try:
-                        sincronizar_carpetas_python(origen, destino_final)
-                        sincronizada = True
-                        break
-                    except Exception:
-                        fallo_copia = True
-            if not sincronizada:
-                if fallo_copia: errores.append(f"No se pudo copiar la carpeta de factura en la OT {ot}.")
-                elif ot_encontrada:
-                    sufijo = "." if metadata_denegada else " en obras."
-                    errores.append(f"No se pudo acceder a la carpeta de la OT {ot}{sufijo}")
-                else: errores.append(f"La OT {ot} no existe en obras.")
+            resultado = _sincronizar_una_ot(origen, factura_nombre, ot, cache_obras)
+            if resultado['status'] == 'error':
+                return jsonify({
+                    "status": "error",
+                    "mensaje": resultado.get('mensaje', "No se pudo completar la sincronización.")
+                })
+            if resultado['status'] != 'ok':
+                errores.extend(resultado.get('errores', []))
     except Exception:
         return jsonify({"status": "error", "mensaje": "No se pudo completar la sincronización."})
-    if errores: return jsonify({"status": "warning", "errores": errores})
+
+    if errores:
+        return jsonify({"status": "warning", "errores": errores})
+
     try:
         actualizar_estado_sync(origen, ots)
     except Exception:
         return jsonify({"status": "error", "mensaje": "No se pudo registrar el estado de sincronizacion."})
+
     return jsonify({"status": "ok"})
 # Módulos de datos compartidos en el servidor.
 from factura_montos import registrar_rutas_montos
