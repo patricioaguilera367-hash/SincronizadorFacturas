@@ -104,9 +104,16 @@ class ColorSystemTests(unittest.TestCase):
         self.assertEqual(self.declarations(".status-enviado").get("color"), "var(--status-sent-text)")
         self.assertEqual(self.declarations(".badge-warning").get("color"), "var(--status-warning-text)")
 
-    def test_api_warnings_keep_warning_semantics_in_both_sync_flows(self):
-        self.assertIn("setStatus(index, 'warning', '⚠ Requiere revisión'", self.source)
-        self.assertIn("setStatus(resItem.index, 'warning', '⚠ Requiere revisión'", self.source)
+    def test_api_warnings_keep_warning_semantics_in_granular_sync(self):
+        self.assertIn(
+            "const mensaje = `⚠ ${exitos}/${ots.length} OT sincronizadas`;",
+            self.source,
+        )
+        self.assertIn(
+            "setStatus(index, 'warning', mensaje, errores.join(' | '));",
+            self.source,
+        )
+        self.assertGreaterEqual(self.source.count("sincronizarFacturaPorOT(index"), 2)
         self.assertIn("hidden.textContent = `: ${statusLabel}`;", self.source)
 
     def test_text_and_status_pairs_meet_aa_in_light_and_dark_themes(self):
