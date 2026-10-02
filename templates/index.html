@@ -1120,17 +1120,19 @@
             }
 
             document.querySelectorAll('[data-online-only]').forEach(control => {
-                control.disabled = modoOffline;
-            });
-
-            document.querySelectorAll('.tag-input, .tag-close, .status-control, .file-picker').forEach(control => {
-                control.disabled = modoOffline;
+                if (modoOffline) {
+                    if (!control.disabled) control.dataset.offlineDisabled = '1';
+                    control.disabled = true;
+                } else if (control.dataset.offlineDisabled === '1') {
+                    control.disabled = false;
+                    delete control.dataset.offlineDisabled;
+                }
             });
 
             document.querySelectorAll('[data-sync-index]').forEach(control => {
                 const index = Number(control.dataset.syncIndex);
                 const fact = facturasActuales[index];
-                control.disabled = modoOffline || !!fact?.ignorado;
+                if (fact?.ignorado) control.disabled = true;
             });
         }
 
