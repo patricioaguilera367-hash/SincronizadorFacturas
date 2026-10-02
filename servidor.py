@@ -203,7 +203,7 @@ def _refrescar_indice_raiz(forzar=False):
 
     with _CACHE_STATE_LOCK:
         mismo_root = _INDEX_REFRESH_STATE.get('root') == BASE_OBRAS
-        reciente = (time.monotonic() - float(_INDEX_REFRESH_STATE.get('last_mono') or 0.0)) < 5.0
+        reciente = (time.monotonic() - float(_INDEX_REFRESH_STATE.get('last_mono') or 0.0)) < 60.0
         if not forzar and mismo_root and reciente and _INDEX_REFRESH_STATE.get('last_result') is not None:
             return _INDEX_REFRESH_STATE['last_result']
 
@@ -220,11 +220,69 @@ def _refrescar_indice_raiz(forzar=False):
     return resultado
 
 
-def _rutas_indice_ot(ot, refrescar=False):
+def _rutas_indice_ot(ot, refrescar=False, incluir_ausentes=False):
     _asegurar_seed_indice()
     if refrescar:
-        _refrescar_indice_raiz(forzar=True)
-    return candidatos_indice(_indice_path(), BASE_OBRAS, ot)
+        _refrescar_indice_raiz(forzar=False)
+    return candidatos_indice(
+        _indice_path(),
+        BASE_OBRAS,
+        ot,
+        incluir_ausentes=incluir_ausentes,
+    )
+
+
+def _comprobar_servidor(forzar=False):
+    if not forzar and _servidor_offline_reciente():
+        return False
+
+    if not _puerto_smb_disponible():
+        _marcar_estado_servidor(False)
+        return False
+
+    try:
+        os.stat(BASE_FACTURAS)
+    except OSError:
+        _marcar_estado_servidor(False)
+        return False
+
+    _marcar_estado_servidor(True)
+    return True
+
+
+def _cache_background():
+    try:
+        _asegurar_seed_indice()
+        if _comprobar_servidor(forzar=True):
+            _refrescar_indice_raiz(forzar=True)
+    except Exception:
+        app.logger.exception('No se pudo actualizar el índice OT en segundo plano')
+
+
+def _iniciar_cache_background():
+    global _CACHE_BACKGROUND_STARTED
+    with _CACHE_STATE_LOCK:
+        if _CACHE_BACKGROUND_STARTED:
+            return
+        _CACHE_BACKGROUND_STARTED = True
+
+    hilo = threading.Thread(
+        target=_cache_background,
+        name='indice-ot-background',
+        daemon=True,
+    )
+    hilo.start()
+
+
+@app.route('/api/runtime', methods=['GET'])
+def estado_runtime():
+    online = _comprobar_servidor(forzar=request.args.get('forzar') == '1')
+    return jsonify({
+        'online': online,
+        'read_only': not online,
+        'snapshot': info_snapshot(_snapshot_path()),
+        'indice': estadisticas_indice(_indice_path(), BASE_OBRAS),
+    })
 
 
 FERIADOS_VIERNES = [
