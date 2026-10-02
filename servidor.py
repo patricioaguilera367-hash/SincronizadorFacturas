@@ -597,32 +597,142 @@ def _abrir_directorio_local(ruta):
     os.startfile(ruta)
 
 
-def _resolver_carpeta_ot(ot):
-    if not isinstance(ot, str) or not ot.strip():
-        return None
+def _probar_candidatos_indice_ot(ot):
+    """Valida rutas cacheadas sin reinterpretar el código OT."""
+    historicos = _rutas_indice_ot(ot, incluir_ausentes=True)
+    candidatos = _rutas_indice_ot(ot)
+    validos = []
+    acceso_denegado = False
+    ot_clean = normalizar_codigo_ot(ot)
 
-    candidatos = [normalizar_codigo_ot(ot).upper()]
-    if componente_aprobado(ot):
-        candidatos.append(ot)
-
-    for candidato in dict.fromkeys(candidatos):
-        ruta = ruta_aprobada(BASE_OBRAS, candidato)
-        if ruta and os.path.isdir(ruta):
-            return ruta
-
-    carpetas = listar_carpetas_obras([ot])
-    if not carpetas:
-        return None
-
-    ot_normalizada = normalizar_codigo_ot(ot)
-    for relativa in carpetas:
-        if not coincide_codigo_ot(os.path.basename(relativa), ot_normalizada):
+    for candidato in candidatos:
+        relativa = candidato.get('relativa', '')
+        partes = [parte for parte in relativa.split('/') if parte]
+        ruta = ruta_aprobada(BASE_OBRAS, *partes)
+        if not ruta:
             continue
-        ruta = ruta_aprobada(BASE_OBRAS, *relativa.split(os.sep))
-        if ruta and os.path.isdir(ruta):
-            return ruta
 
-    return None
+        try:
+            os.stat(ruta)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            acceso_denegado = True
+            continue
+
+        if not os.path.isdir(ruta):
+            continue
+        if not coincide_codigo_ot(os.path.basename(ruta), ot_clean):
+            continue
+
+        registrar_ruta_encontrada(_indice_path(), BASE_OBRAS, ot, ruta)
+        validos.append(ruta)
+
+    return validos, historicos, acceso_denegado
+
+
+def _resolver_rutas_ot(ot, cache_obras=None):
+    """
+    Resuelve una OT preservando exactamente la regla de matching existente.
+
+    Orden:
+    1) índice persistente;
+    2) coincidencia directa barata;
+    3) reconciliación rápida de primer nivel;
+    4) búsqueda recursiva heredada como fallback.
+    """
+    if not isinstance(ot, str) or not ot.strip():
+        return {'status': 'missing', 'rutas': [], 'historica': False}
+
+    cache_obras = cache_obras if cache_obras is not None else {}
+    rutas, historicos, acceso_denegado = _probar_candidatos_indice_ot(ot)
+    if rutas:
+        return {'status': 'ok', 'rutas': rutas, 'historica': bool(historicos)}
+
+    # Conservamos el atajo original para carpetas cuyo nombre coincide directo.
+    candidatos_directos = [normalizar_codigo_ot(ot).upper()]
+    if componente_aprobado(ot):
+        candidatos_directos.append(ot)
+
+    for candidato in dict.fromkeys(candidatos_directos):
+        ruta = ruta_aprobada(BASE_OBRAS, candidato)
+        if not ruta:
+            continue
+        try:
+            os.stat(ruta)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            acceso_denegado = True
+            continue
+
+        if os.path.isdir(ruta):
+            registrar_ruta_encontrada(_indice_path(), BASE_OBRAS, ot, ruta)
+            return {'status': 'ok', 'rutas': [ruta], 'historica': bool(historicos)}
+
+    # Si el índice no tenía la OT, una pasada rápida de la raíz puede descubrir
+    # carpetas nuevas sin recorrer todo el árbol. Se reutiliza hasta por 60 s.
+    refresco = _refrescar_indice_raiz(forzar=False)
+    if refresco.get('ok'):
+        rutas, historicos_actualizados, acceso_indice = _probar_candidatos_indice_ot(ot)
+        historicos = historicos_actualizados or historicos
+        acceso_denegado = acceso_denegado or acceso_indice
+        if rutas:
+            return {'status': 'ok', 'rutas': rutas, 'historica': bool(historicos)}
+    elif acceso_denegado:
+        return {'status': 'unavailable', 'rutas': [], 'historica': bool(historicos)}
+
+    # Fallback compatible con el comportamiento antiguo. Sólo se paga para una
+    # OT que el índice + revisión rápida no pudieron resolver.
+    if 'carpetas' not in cache_obras:
+        cache_obras['carpetas'] = listar_carpetas_obras(
+            cache_obras.get('ots_pendientes', [ot])
+        )
+
+    carpetas_obras = cache_obras['carpetas']
+    if carpetas_obras is None:
+        _marcar_estado_servidor(False)
+        return {'status': 'unavailable', 'rutas': [], 'historica': bool(historicos)}
+
+    ot_clean = normalizar_codigo_ot(ot)
+    encontradas = []
+    for relativa in carpetas_obras:
+        nombre_carpeta = os.path.basename(relativa)
+        if not coincide_codigo_ot(nombre_carpeta, ot_clean):
+            continue
+
+        destino_base = ruta_aprobada(BASE_OBRAS, *relativa.split(os.sep))
+        if not destino_base:
+            continue
+        try:
+            os.stat(destino_base)
+        except OSError:
+            continue
+        if not os.path.isdir(destino_base):
+            continue
+
+        registrar_ruta_encontrada(_indice_path(), BASE_OBRAS, ot, destino_base)
+        encontradas.append(destino_base)
+
+    if encontradas:
+        _marcar_estado_servidor(True)
+        return {'status': 'ok', 'rutas': encontradas, 'historica': bool(historicos)}
+
+    # Sólo una búsqueda recursiva completada correctamente permite afirmar que
+    # una ruta histórica ya no está. Una caída de red nunca borra ese historial.
+    for anterior in historicos:
+        ruta_anterior = anterior.get('ruta')
+        if ruta_anterior:
+            marcar_ruta_ausente(_indice_path(), BASE_OBRAS, ot, ruta_anterior)
+
+    return {'status': 'missing', 'rutas': [], 'historica': bool(historicos)}
+
+
+def _resolver_carpeta_ot(ot):
+    resultado = _resolver_rutas_ot(ot, {'ots_pendientes': {normalizar_codigo_ot(ot)}})
+    if resultado.get('status') != 'ok' or not resultado.get('rutas'):
+        return None
+    return resultado['rutas'][0]
 
 
 @app.route('/api/abrir_carpeta', methods=['POST'])
