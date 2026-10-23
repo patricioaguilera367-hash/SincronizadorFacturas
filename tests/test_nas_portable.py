@@ -103,6 +103,25 @@ class PortableNasTests(unittest.TestCase):
         respuesta = self.client.get('/api/facturas', query_string={'semana': self.semana.name})
         self.assertEqual(respuesta.get_json()[0]['badge_class'], 'badge-danger')
 
+    def test_cached_week_uses_local_snapshot_without_contacting_nas(self):
+        original = self.client.get('/api/facturas', query_string={'semana': self.semana.name})
+        self.assertEqual(original.status_code, 200)
+
+        with patch.object(servidor, '_comprobar_servidor', side_effect=AssertionError('NAS consulted')):
+            with patch.object(servidor.os, 'scandir', side_effect=AssertionError('SMB scan')):
+                cached = self.client.get('/api/facturas_cache', query_string={'semana': self.semana.name})
+
+        self.assertEqual(cached.status_code, 200)
+        self.assertEqual(cached.get_json(), original.get_json())
+        self.assertEqual(cached.headers.get('X-Sincronizador-Cached'), '1')
+        self.assertIsNone(cached.headers.get('X-Sincronizador-Offline'))
+
+    def test_cached_week_rejects_invalid_names_and_unknown_weeks(self):
+        invalid = self.client.get('/api/facturas_cache', query_string={'semana': '../otro'})
+        absent = self.client.get('/api/facturas_cache', query_string={'semana': 'Semana sin snapshot'})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(absent.status_code, 404)
+
     def test_invalid_sync_document_states_do_not_abort_whole_week(self):
         (self.factura / '.sync_state.json').write_text('{"estados": "no válido"}', encoding='utf-8')
         respuesta = self.client.get('/api/facturas', query_string={'semana': self.semana.name})

@@ -697,6 +697,8 @@
             white-space: normal;
             overflow-wrap: anywhere;
         }
+        .week-freshness { display: inline-block; margin-top: 3px; color: var(--text-muted); font-size: .7rem; }
+        .week-freshness[hidden] { display: none; }
         .header-titles p {
             margin-top: 3px;
             font-size: .68rem;
@@ -941,6 +943,7 @@
                 </button>
                 <div class="header-titles">
                     <h1 id="tituloSemana">Selecciona una semana</h1>
+                    <span id="estadoActualizacionSemana" class="week-freshness" role="status" aria-live="polite" hidden></span>
                     <p>Facturas · OT · sincronización</p>
                 </div>
             </div>
@@ -1097,6 +1100,7 @@
         let revisionActual = {items: [], total: 0, danger: 0, warning: 0};
         let modoOffline = false;
         let snapshotActualizado = null;
+        const cacheSemanasCliente = new Map();
         const submissionsInFlight = new Set();
 
         function formatearFechaSnapshot(valor) {
@@ -1829,23 +1833,79 @@
                 document.getElementById("statsContainer").style.display = window.matchMedia('(max-width: 900px)').matches ? "grid" : "flex";
             });
             mostrarEstadoTabla('Cargando facturas...');
+            const contenedor = document.getElementById('contenedorTabla');
+            const acciones = document.getElementById('botonesAccion');
+            const indicador = document.getElementById('estadoActualizacionSemana');
+            const indicarVerificacion = (pendiente, mensaje = '⏳ Verificando datos con el NAS · sólo lectura') => {
+                contenedor.inert = pendiente;
+                acciones.inert = pendiente;
+                indicador.hidden = !pendiente;
+                indicador.textContent = pendiente ? mensaje : '';
+            };
+            indicarVerificacion(true);
+
+            let cacheVisible = false;
+            let verificacionFinalizada = false;
+            const mostrarCache = facturas => {
+                if (!Array.isArray(facturas) || verificacionFinalizada) return;
+                if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
+                pintarFacturas(facturas);
+                cacheVisible = true;
+            };
+
+            const cacheEnMemoria = cacheSemanasCliente.get(semana);
+            if (cacheEnMemoria) {
+                mostrarCache(cacheEnMemoria);
+            } else {
+                // El snapshot ya está en disco local; no se hace ningún acceso al NAS aquí.
+                fetch(`/api/facturas_cache?semana=${encodeURIComponent(semana)}`, {cache: 'no-store'})
+                    .then(async res => {
+                        if (res.ok) mostrarCache(await res.json());
+                    })
+                    .catch(() => {});
+            }
+
             try {
                 const res = await fetchConTimeout(`/api/facturas?semana=${encodeURIComponent(semana)}`, {}, 45000);
                 const facturas = await respuestaJson(res, 'No se pudieron cargar las facturas.');
                 if (!Array.isArray(facturas)) throw new Error('No se pudieron cargar las facturas.');
+                verificacionFinalizada = true;
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
-                facturasActuales = facturas;
-                tagsData = {};
-                estadosSyncOT = {};
-                if (facturasActuales.length === 0) {
-                    mostrarEstadoTabla('Esta semana no contiene carpetas de factura.');
-                    updateStats();
-                    cargarRevision(false);
-                    if (!modoOffline) initSemanas(true);
+                // Máximo ocho semanas en RAM; al reiniciar sigue disponible el snapshot local.
+                cacheSemanasCliente.delete(semana);
+                cacheSemanasCliente.set(semana, facturas);
+                if (cacheSemanasCliente.size > 8) cacheSemanasCliente.delete(cacheSemanasCliente.keys().next().value);
+                pintarFacturas(facturas);
+                indicarVerificacion(false);
+                if (!modoOffline) cargarRevision(false);
+                if (!modoOffline) initSemanas(true);
+            } catch (error) {
+                verificacionFinalizada = true;
+                if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
+                if (cacheVisible) {
+                    indicarVerificacion(true, '⚠ No se pudo verificar el NAS · sólo lectura. Selecciona la semana para reintentar.');
                     return;
                 }
-                const tbody = document.getElementById("tablaBody");
-                const fragment = document.createDocumentFragment();
+                facturasActuales = [];
+                tagsData = {};
+                estadosSyncOT = {};
+                mostrarEstadoTabla(error.message || 'No se pudieron cargar las facturas.', () => cargarFacturas(semana, elementoLista || document.querySelector('.week-item.active')));
+                updateStats();
+                indicarVerificacion(true, '⚠ No se pudo verificar el NAS · vuelve a seleccionar la semana para reintentar.');
+            }
+        }
+
+        function pintarFacturas(facturas) {
+            facturasActuales = facturas;
+            tagsData = {};
+            estadosSyncOT = {};
+            if (facturasActuales.length === 0) {
+                mostrarEstadoTabla('Esta semana no contiene carpetas de factura.');
+                updateStats();
+                return;
+            }
+            const tbody = document.getElementById("tablaBody");
+            const fragment = document.createDocumentFragment();
 
             facturasActuales.forEach((fact, index) => {
                 tagsData[index] = fact.ot_content.split(',').map(s => s.trim()).filter(s => s);
@@ -2038,15 +2098,6 @@
             facturasActuales.forEach((fact, index) => { renderTags(index); });
             aplicarModoOffline(modoOffline, snapshotActualizado);
             updateStats();
-            if (!modoOffline) cargarRevision(false);
-            if (!modoOffline) initSemanas(true);
-            } catch (error) {
-                if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
-                facturasActuales = [];
-                tagsData = {};
-                mostrarEstadoTabla(error.message || 'No se pudieron cargar las facturas.', () => cargarFacturas(semana, elementoLista || document.querySelector('.week-item.active')));
-                updateStats();
-            }
         }
 
         async function copiarTablaExcel() {

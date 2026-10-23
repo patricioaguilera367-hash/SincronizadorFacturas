@@ -970,6 +970,22 @@ def _detalle_factura(ruta_factura, nombre, medir=False):
         'evaluar_estado': (fin_evaluacion - fin_sync) * 1000,
     }
 
+@app.route('/api/facturas_cache', methods=['GET'])
+def get_facturas_cache():
+    """Lectura local inmediata; no comprueba el NAS ni autoriza escrituras."""
+    semana = request.args.get('semana')
+    if not componente_aprobado(semana):
+        return error_ruta_invalida()
+
+    facturas = snapshot_facturas(_snapshot_path(), semana)
+    if not isinstance(facturas, list):
+        return jsonify({'error': 'Esta semana aún no tiene una copia local.'}), 404
+    respuesta = jsonify(facturas)
+    respuesta.headers['X-Sincronizador-Cached'] = '1'
+    respuesta.headers['Cache-Control'] = 'no-store'
+    return respuesta
+
+
 @app.route('/api/facturas', methods=['GET'])
 def get_facturas():
     semana = request.args.get('semana')
