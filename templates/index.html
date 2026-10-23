@@ -722,12 +722,12 @@
 
         const syncTimeoutMs = 30000;
 
-        async function fetchConTimeout(url, options, timeoutMs = syncTimeoutMs) {
+        async function fetchConTimeout(url, options = {}, timeoutMs = syncTimeoutMs, timeoutMessage = 'La sincronización superó los 30 segundos. Inténtalo nuevamente.') {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
             try { return await fetch(url, { ...options, signal: controller.signal }); }
             catch (error) {
-                if (error.name === 'AbortError') throw new Error('La sincronización superó los 30 segundos. Inténtalo nuevamente.');
+                if (error.name === 'AbortError') throw new Error(timeoutMessage);
                 throw error;
             } finally { clearTimeout(timeout); }
         }
@@ -934,7 +934,12 @@
             const requestToken = ++weeksRequestToken;
             if (!detallado) mostrarEstadoSemanas('Cargando semanas...');
             try {
-                const res = await fetch(detallado ? '/api/semanas' : '/api/semanas?rapido=1');
+                // No recorrer todo el historial del NAS por cada carga o sincronización.
+                // Al inicio sólo se precalculan las 4 semanas recientes; después, la activa.
+                const url = detallado
+                    ? (semanaSeleccionada ? `/api/semanas?semana=${encodeURIComponent(semanaSeleccionada)}` : '/api/semanas?limite=4')
+                    : '/api/semanas?rapido=1';
+                const res = await fetch(url);
                 const semanas = await respuestaJson(res, 'No se pudieron cargar las semanas.');
                 if (!Array.isArray(semanas)) throw new Error('No se pudieron cargar las semanas.');
                 if (requestToken !== weeksRequestToken) return;
@@ -1170,7 +1175,7 @@
             });
             mostrarEstadoTabla('Cargando facturas...');
             try {
-                const res = await fetch(`/api/facturas?semana=${encodeURIComponent(semana)}`);
+                const res = await fetchConTimeout(`/api/facturas?semana=${encodeURIComponent(semana)}`, {}, 20000, 'La carga de facturas superó los 20 segundos. Reintenta.');
                 const facturas = await respuestaJson(res, 'No se pudieron cargar las facturas.');
                 if (!Array.isArray(facturas)) throw new Error('No se pudieron cargar las facturas.');
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
@@ -1334,6 +1339,7 @@
             tbody.replaceChildren(fragment);
             facturasActuales.forEach((fact, index) => { renderTags(index); });
             updateStats();
+            initSemanas(true);
             } catch (error) {
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
                 facturasActuales = [];

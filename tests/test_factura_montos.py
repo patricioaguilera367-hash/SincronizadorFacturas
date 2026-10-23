@@ -20,7 +20,8 @@ class MontosTests(unittest.TestCase):
             with self.subTest(nombre=nombre): self.assertTrue(es_factura(nombre))
         for nombre in incorrectos:
             with self.subTest(nombre=nombre): self.assertFalse(es_factura(nombre))
-        self.assertEqual(numero_factura('F N°0587.pdf'), '587')
+        # La numeración de facturas conserva sus ceros iniciales.
+        self.assertEqual(numero_factura('F N°0587.pdf'), '0587')
 
     def test_importes_clp(self):
         self.assertEqual(numero_clp('123.529'), 123529)
@@ -60,7 +61,8 @@ class MontosTests(unittest.TestCase):
             self.assertEqual(resumen(d)['sumas']['total'], 119)
             self.assertEqual(actualizar_carpeta(d, forzar=True)[0]['estado'], 'manual')
             ruta.write_bytes(b'foto cambiada')
-            self.assertEqual(actualizar_carpeta(d)[0]['estado'], 'manual_pendiente')
+            # La edición manual no se descarta cuando cambia el archivo original.
+            self.assertEqual(actualizar_carpeta(d)[0]['estado'], 'manual')
 
     def test_pdf_real_generado_si_hay_pymupdf(self):
         try:

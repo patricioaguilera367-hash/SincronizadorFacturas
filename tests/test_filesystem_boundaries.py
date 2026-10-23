@@ -90,7 +90,8 @@ class FilesystemBoundaryTests(unittest.TestCase):
         response = self.client.post("/api/guardar", json={"ruta": str(self.factura), "contenido": "OT2"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
-        self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT2")
+        # Desde v1.1.1 OT.txt se migra a .OT.txt al guardar.
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT2")
 
     def test_delete_rejects_the_invoice_root_without_removing_it(self):
         response = self.client.post("/api/eliminar_factura", json={"ruta": str(self.facturas)})
@@ -152,7 +153,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
-        self.assertEqual((self.factura / "OT.txt").read_text(encoding="utf-8"), "OT1")
+        self.assertEqual((self.factura / ".OT.txt").read_text(encoding="utf-8"), "OT1")
         self.assertEqual(json.loads((self.factura / ".sync_state.json").read_text(encoding="utf-8"))["ots"], ["OT1"])
 
     def test_sync_all_lists_obras_once_for_multiple_invoices(self):
@@ -183,7 +184,7 @@ class FilesystemBoundaryTests(unittest.TestCase):
         original_open = open
 
         def fail_ot_write(path, mode="r", *args, **kwargs):
-            if Path(path).name == "OT.txt" and "w" in mode:
+            if Path(path).name in {"OT.txt", ".OT.txt"} and "w" in mode:
                 raise OSError("OT write failed")
             return original_open(path, mode, *args, **kwargs)
 
@@ -300,15 +301,15 @@ class FilesystemBoundaryTests(unittest.TestCase):
     def test_fast_week_discovery_skips_child_checks_and_detail_isolates_child_errors(self):
         second_week = self.facturas / "Semana 02"
         second_week.mkdir()
-        original_listdir = os.listdir
+        original_scandir = os.scandir
         blocked_week = os.path.normcase(os.path.realpath(self.factura.parent))
 
-        def listdir(path):
+        def scandir(path):
             if os.path.normcase(os.path.realpath(path)) == blocked_week:
                 raise PermissionError("inaccessible week")
-            return original_listdir(path)
+            return original_scandir(path)
 
-        with patch.object(servidor.os, "listdir", side_effect=listdir):
+        with patch.object(servidor.os, "scandir", side_effect=scandir):
             fast = self.client.get("/api/semanas?rapido=1")
             detailed = self.client.get("/api/semanas")
 

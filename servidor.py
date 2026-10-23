@@ -2,6 +2,9 @@ import os
 import shutil
 import re
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from flask import Flask, jsonify, request, render_template, send_file
 
@@ -144,6 +147,14 @@ def obtener_fecha_semana(ultima_fecha=None):
 # V1.1.1 metadata OT oculta
 OT_METADATA_NOMBRE = '.OT.txt'
 OT_METADATA_LEGACY = 'OT.txt'
+ARCHIVOS_INTERNOS = frozenset({'ot.txt', '.ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json'})
+LECTURAS_SIMULTANEAS = 4  # SMB: I/O paralelo limitado, no un hilo por archivo.
+
+# Sólo se guardan coincidencias positivas; una carpeta borrada se valida antes de usarla.
+_indice_ot = {}
+_indice_ot_lock = threading.Lock()
+_INDICE_OT_SEGUNDOS = 300
+_INDICE_OT_MAXIMO = 512
 
 
 def _ocultar_archivo_windows(ruta):
@@ -177,12 +188,10 @@ def ruta_ot_metadata(ruta_factura):
     Cuando encuentra OT.txt antiguo intenta migrarlo a .OT.txt.
     """
     nueva = ruta_aprobada(ruta_factura, OT_METADATA_NOMBRE)
-    vieja = ruta_aprobada(ruta_factura, OT_METADATA_LEGACY)
-
     if nueva and os.path.exists(nueva):
-        _ocultar_archivo_windows(nueva)
         return nueva
 
+    vieja = ruta_aprobada(ruta_factura, OT_METADATA_LEGACY)
     if vieja and os.path.exists(vieja):
         if nueva:
             try:
@@ -198,22 +207,61 @@ def ruta_ot_metadata(ruta_factura):
     return nueva
 
 
-def evaluar_estado_sync(ruta_factura, ot_content):
-    if not ot_content.strip(): return "badge-none", "-"
-    state_path = ruta_aprobada(ruta_factura, '.sync_state.json')
-    if not state_path or not os.path.exists(state_path): return "badge-loading", "⏳ Pendiente de sincronización"
+def inspeccionar_factura(ruta_factura):
+    """Una enumeración SMB para presencia de metadatos y atributos de documentos."""
+    internos, archivos = {}, {}
+    with os.scandir(ruta_factura) as entradas:
+        for entrada in entradas:
+            if entrada.is_symlink() or not entrada.is_file(follow_symlinks=False):
+                continue
+            if entrada.name.lower() in ARCHIVOS_INTERNOS:
+                internos[entrada.name.lower()] = entrada.path
+                continue
+            info = entrada.stat(follow_symlinks=False)
+            archivos[entrada.name] = {'size': info.st_size, 'mtime': int(info.st_mtime)}
+    return internos, archivos
+
+
+def archivos_sincronizables(ruta_factura):
+    """Instantánea de archivos para comparar y persistir el estado sincronizado."""
+    _, archivos = inspeccionar_factura(ruta_factura)
+    return archivos
+
+
+def leer_estado_sync(ruta_factura):
+    ruta = ruta_aprobada(ruta_factura, '.sync_state.json')
+    if not ruta:
+        return None
     try:
-        with open(state_path, 'r', encoding='utf-8') as f: state = json.load(f)
+        with open(ruta, 'r', encoding='utf-8') as archivo:
+            return json.load(archivo)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {'_estado_invalido': True}
+
+
+_ESTADO_SIN_LEER = object()
+
+
+def evaluar_estado_sync(ruta_factura, ot_content, estado=_ESTADO_SIN_LEER, archivos_actuales=None):
+    if not ot_content.strip(): return "badge-none", "-"
+    if estado is _ESTADO_SIN_LEER:
+        estado = leer_estado_sync(ruta_factura)
+    if estado is None: return "badge-loading", "⏳ Pendiente de sincronización"
+    try:
+        if estado.get('_estado_invalido'):
+            return "badge-danger", "❌ No se pudo verificar el estado"
         current_ots = [ot.strip() for ot in ot_content.split(',') if ot.strip()]
-        if set(current_ots) != set(state.get('ots', [])): return "badge-danger", "⚠ Código OT modificado"
-        estados = normalizar_estados_documentos(state)
+        if set(current_ots) != set(estado.get('ots', [])): return "badge-danger", "⚠ Código OT modificado"
+        estados = normalizar_estados_documentos(estado)
         if estados['actual'] != estados['sincronizado']: return "badge-danger", "⚠ Estado de documento modificado"
-        archivos_actuales = {}
-        for item in os.listdir(ruta_factura):
-            if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
-            path = ruta_aprobada(ruta_factura, item)
-            if path and os.path.isfile(path): archivos_actuales[item] = {'size': os.path.getsize(path), 'mtime': int(os.path.getmtime(path))}
-        archivos_sync = state.get('archivos', {})
+        if archivos_actuales is None:
+            archivos_actuales = archivos_sincronizables(ruta_factura)
+        # Las versiones anteriores incluían .OT.txt por error en el estado.
+        # Ignorarlo aquí mantiene compatibles esas sincronizaciones existentes.
+        archivos_sync = {nombre: datos for nombre, datos in estado.get('archivos', {}).items()
+                         if nombre.lower() not in ARCHIVOS_INTERNOS}
         for item, info in archivos_actuales.items():
             if item not in archivos_sync: return "badge-danger", "⚠ Archivo agregado"
             if info['size'] != archivos_sync[item]['size'] or info['mtime'] != archivos_sync[item]['mtime']: return "badge-danger", "⚠ Archivo modificado"
@@ -229,11 +277,7 @@ def actualizar_estado_sync(ruta_factura, ots):
     except Exception:
         state_anterior = {}
     estados_actuales = normalizar_estados_documentos(state_anterior)['actual']
-    state = {'ots': ots, 'archivos': {}, 'estados': {'actual': estados_actuales, 'sincronizado': estados_actuales}}
-    for item in os.listdir(ruta_factura):
-        if item.lower() in ['ot.txt', '.sync_state.json', 'ignorado.txt', '.factura_montos.json']: continue
-        path = ruta_aprobada(ruta_factura, item)
-        if path and os.path.isfile(path): state['archivos'][item] = {'size': os.path.getsize(path), 'mtime': int(os.path.getmtime(path))}
+    state = {'ots': ots, 'archivos': archivos_sincronizables(ruta_factura), 'estados': {'actual': estados_actuales, 'sincronizado': estados_actuales}}
     with open(state_path, 'w', encoding='utf-8') as f: json.dump(state, f, ensure_ascii=False)
 
 def sincronizar_carpetas_python(origen, destino):
@@ -263,70 +307,101 @@ def index(): return render_template('index.html')
 @app.route('/api/semanas', methods=['GET'])
 def get_semanas():
     try:
-        semanas = []
         rapido = request.args.get('rapido') == '1'
-        for d in os.listdir(BASE_FACTURAS):
+        seleccionada = request.args.get('semana')
+        if seleccionada is not None and not componente_aprobado(seleccionada):
+            return error_ruta_invalida()
+        nombres = sorted(os.listdir(BASE_FACTURAS), key=str.casefold)
+        if seleccionada is not None:
+            nombres = [nombre for nombre in nombres if nombre == seleccionada]
+        elif not rapido and request.args.get('limite'):
+            try:
+                limite = int(request.args['limite'])
+                if not 1 <= limite <= 20:
+                    return error_ruta_invalida()
+            except ValueError:
+                return error_ruta_invalida()
+            nombres = sorted(nombres, key=lambda nombre: int(re.match(r'^\d+', nombre).group()) if re.match(r'^\d+', nombre) else 0, reverse=True)[:limite]
+        semanas = []
+        for d in nombres:
             ruta_semana = ruta_aprobada(BASE_FACTURAS, d)
             if ruta_semana and os.path.isdir(ruta_semana):
                 if rapido:
                     semanas.append({"nombre": d, "estado": "loading"})
                     continue
-                estado = "success"
                 try:
-                    carpetas = [f for f in os.listdir(ruta_semana) if ruta_aprobada(ruta_semana, f) and os.path.isdir(ruta_aprobada(ruta_semana, f))]
-                    if not carpetas:
-                        estado = "none"
-                    else:
-                        for f in carpetas:
-                            ruta_factura = ruta_aprobada(ruta_semana, f)
-                            ot_txt = ruta_ot_metadata(ruta_factura)
-                            sync_json = ruta_aprobada(ruta_factura, '.sync_state.json')
-                            ignorado_path = ruta_aprobada(ruta_factura, 'ignorado.txt')
-                            
-                            if ignorado_path and os.path.exists(ignorado_path): 
-                                continue 
-                                
-                            if not ot_txt or not os.path.exists(ot_txt):
-                                estado = "danger"
-                                break
-                            else:
-                                with open(ot_txt, 'r', encoding='utf-8') as f_ot: content = f_ot.read().strip()
-                                if not content:
-                                    estado = "danger"
-                                    break
-                                elif not sync_json or not os.path.exists(sync_json):
-                                    if estado != "danger": estado = "warning"
+                    estado = _estado_semana(ruta_semana)
                 except OSError:
                     estado = "unavailable"
                 semanas.append({"nombre": d, "estado": estado})
         return jsonify(semanas)
     except Exception: return jsonify({"error": "No se pudieron cargar las semanas."}), 500
 
+
+def _estado_semana(ruta_semana):
+    estado = 'none'
+    with os.scandir(ruta_semana) as entradas:
+        for entrada in entradas:
+            if not entrada.is_dir(follow_symlinks=False):
+                continue
+            ruta_factura = ruta_aprobada(ruta_semana, entrada.name)
+            if not ruta_factura:
+                continue
+            if estado == 'none':
+                estado = 'success'
+            with os.scandir(ruta_factura) as archivos:
+                nombres = {archivo.name.lower(): archivo.path for archivo in archivos
+                           if archivo.is_file(follow_symlinks=False) and not archivo.is_symlink()}
+            if 'ignorado.txt' in nombres:
+                continue
+            ruta_ot = nombres.get('.ot.txt') or nombres.get('ot.txt')
+            if not ruta_ot:
+                return 'danger'
+            with open(ruta_ot, 'r', encoding='utf-8') as archivo:
+                if not archivo.read().strip():
+                    return 'danger'
+            if '.sync_state.json' not in nombres:
+                estado = 'warning'
+    return estado
+
+
+def _detalle_factura(ruta_factura, nombre):
+    internos, archivos = inspeccionar_factura(ruta_factura)
+    # Una OT antigua se migra cuando se abre esa factura, como antes.
+    ot_txt_path = (ruta_aprobada(ruta_factura, OT_METADATA_NOMBRE)
+                   if '.ot.txt' in internos else
+                   ruta_ot_metadata(ruta_factura) if 'ot.txt' in internos else None)
+    ot_content = ''
+    if ot_txt_path:
+        with open(ot_txt_path, 'r', encoding='utf-8') as archivo:
+            ot_content = archivo.read().strip()
+    ignorado = 'ignorado.txt' in internos
+    estado = leer_estado_sync(ruta_factura) if '.sync_state.json' in internos else None
+    if ignorado:
+        clase_b, texto_b = "badge-ignored", "🚫 Ignorado"
+    else:
+        clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content, estado=estado, archivos_actuales=archivos)
+    estados = normalizar_estados_documentos(estado or {})['actual']
+    return {'nombre': nombre, 'ruta': ruta_factura, 'ot_content': ot_content,
+            'badge_class': clase_b, 'badge_text': texto_b, 'ignorado': ignorado,
+            'estados': estados}
+
+
 @app.route('/api/facturas', methods=['GET'])
 def get_facturas():
     semana = request.args.get('semana')
     if not componente_aprobado(semana): return error_ruta_invalida()
     ruta_semana = ruta_aprobada(BASE_FACTURAS, semana)
-    facturas_data = []
-    if ruta_semana and os.path.exists(ruta_semana):
-        for f in os.listdir(ruta_semana):
-            ruta_factura = ruta_aprobada(ruta_semana, f)
-            if ruta_factura and os.path.isdir(ruta_factura):
-                ot_txt_path = ruta_ot_metadata(ruta_factura)
-                ignorado_path = ruta_aprobada(ruta_factura, "ignorado.txt")
-                ot_content = ""
-                if ot_txt_path and os.path.exists(ot_txt_path):
-                    with open(ot_txt_path, 'r', encoding='utf-8') as file: ot_content = file.read().strip()
-                
-                ignorado = bool(ignorado_path and os.path.exists(ignorado_path))
-                if ignorado: clase_b, texto_b = "badge-ignored", "🚫 Ignorado"
-                else: clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content)
-                try:
-                    with open(ruta_aprobada(ruta_factura, '.sync_state.json'), 'r', encoding='utf-8') as file_state:
-                        estado_documentos = normalizar_estados_documentos(json.load(file_state))['actual']
-                except Exception:
-                    estado_documentos = normalizar_estados_documentos({})['actual']
-                facturas_data.append({"nombre": f, "ruta": ruta_factura, "ot_content": ot_content, "badge_class": clase_b, "badge_text": texto_b, "ignorado": ignorado, "estados": estado_documentos})
+    if not ruta_semana or not os.path.isdir(ruta_semana):
+        return jsonify([])
+    with os.scandir(ruta_semana) as entradas:
+        carpetas = [(ruta, entrada.name) for entrada in entradas
+                    if entrada.is_dir(follow_symlinks=False)
+                    if (ruta := ruta_aprobada(ruta_semana, entrada.name))]
+    carpetas.sort(key=lambda par: par[1].casefold())
+    # Cada factura es independiente: 4 lecturas SMB concurrentes sin perder orden.
+    with ThreadPoolExecutor(max_workers=LECTURAS_SIMULTANEAS) as ejecutor:
+        facturas_data = list(ejecutor.map(lambda par: _detalle_factura(*par), carpetas))
     return jsonify(facturas_data)
 
 @app.route('/api/actualizar_estado_documento', methods=['POST'])
@@ -496,7 +571,7 @@ def listar_carpetas_obras(ots=None):
         carpetas = []
         carpeta_facturas = os.path.normcase(os.path.basename(os.path.dirname(BASE_FACTURAS)))
         raiz_encontrada = False
-        # ponytail: Recursive lookup runs only after direct OT lookup fails; add an OT index if the share grows enough to make this slow.
+        # El recorrido completo sólo se ejecuta si falla la ruta directa y el índice positivo.
         for raiz, directorios, _ in os.walk(BASE_OBRAS, topdown=True, followlinks=False):
             if not raiz_encontrada:
                 raiz_encontrada = True
@@ -521,6 +596,53 @@ def listar_carpetas_obras(ots=None):
         return carpetas if raiz_encontrada else None
     except Exception:
         return None
+
+
+def _carpetas_obras_cacheadas(codigo):
+    clave = (os.path.normcase(BASE_OBRAS), codigo)
+    with _indice_ot_lock:
+        guardado = _indice_ot.get(clave)
+    if not guardado or time.monotonic() - guardado[0] > _INDICE_OT_SEGUNDOS:
+        return None
+    validadas = []
+    for relativa in guardado[1]:
+        if not coincide_codigo_ot(os.path.basename(relativa), codigo):
+            return None
+        ruta = ruta_aprobada(BASE_OBRAS, *relativa.split(os.sep))
+        if not ruta or not os.path.isdir(ruta):
+            return None
+        validadas.append(relativa)
+    return validadas or None
+
+
+def _buscar_carpetas_obras(ots):
+    codigos = {normalizar_codigo_ot(ot) for ot in ots if normalizar_codigo_ot(ot)}
+    encontradas, pendientes = [], set()
+    for codigo in codigos:
+        guardadas = _carpetas_obras_cacheadas(codigo)
+        if guardadas:
+            encontradas.extend(guardadas)
+        else:
+            pendientes.add(codigo)
+    if pendientes:
+        nuevas = listar_carpetas_obras(pendientes)
+        if nuevas is None:
+            return None
+        encontradas.extend(nuevas)
+        ahora = time.monotonic()
+        with _indice_ot_lock:
+            for codigo in pendientes:
+                coincidencias = [ruta for ruta in nuevas if coincide_codigo_ot(os.path.basename(ruta), codigo)]
+                if coincidencias:
+                    _indice_ot[(os.path.normcase(BASE_OBRAS), codigo)] = (ahora, coincidencias)
+            while len(_indice_ot) > _INDICE_OT_MAXIMO:
+                _indice_ot.pop(next(iter(_indice_ot)))
+    return list(dict.fromkeys(encontradas))
+
+
+def buscar_carpetas_ot(ot):
+    """Consulta el índice positivo; al faltar una carpeta, vuelve a recorrer obras."""
+    return _buscar_carpetas_obras([ot])
 
 @app.route('/api/sincronizar_todo', methods=['POST'])
 def sincronizar_todo():
@@ -556,6 +678,7 @@ def procesar_sincronizacion(data, cache_obras=None):
         ot_path = ruta_ot_metadata(origen)
         if not ot_path: return error_ruta_invalida()
         with open(ot_path, 'w', encoding='utf-8') as f: f.write(data['contenido'])
+        _ocultar_archivo_windows(ot_path)
     except Exception:
         return jsonify({"status": "error", "mensaje": "No se pudieron guardar los codigos OT."})
 
@@ -592,7 +715,7 @@ def procesar_sincronizacion(data, cache_obras=None):
                         fallo_copia = True
             if not sincronizada:
                 if 'carpetas' not in cache_obras:
-                    cache_obras['carpetas'] = listar_carpetas_obras(cache_obras.get('ots_pendientes', [ot]))
+                    cache_obras['carpetas'] = _buscar_carpetas_obras(cache_obras.get('ots_pendientes', [ot]))
                 carpetas_obras = cache_obras['carpetas']
                 if carpetas_obras is None:
                     return jsonify({"status": "error", "mensaje": "No se pudo acceder a las carpetas de obras."})
@@ -630,13 +753,15 @@ def procesar_sincronizacion(data, cache_obras=None):
     except Exception:
         return jsonify({"status": "error", "mensaje": "No se pudo registrar el estado de sincronizacion."})
     return jsonify({"status": "ok"})
-from diagnostico_sync import registrar_diagnostico_ot
-
-registrar_diagnostico_ot(
-    app,
-    BASE_OBRAS,
-    ruta_aprobada
-)
+# La utilidad local de diagnóstico no está publicada en el repositorio.
+# Su ausencia no debe impedir iniciar la aplicación principal.
+try:
+    from diagnostico_sync import registrar_diagnostico_ot
+except ModuleNotFoundError as error:
+    if error.name != 'diagnostico_sync':
+        raise
+else:
+    registrar_diagnostico_ot(app, BASE_OBRAS, ruta_aprobada)
 # Módulo opcional e independiente para importes de facturas.
 from factura_montos import registrar_rutas_montos
 registrar_rutas_montos(app, BASE_FACTURAS, ruta_factura_aprobada, ruta_aprobada)
