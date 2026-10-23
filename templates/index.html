@@ -1454,7 +1454,11 @@
             const requestToken = ++weeksRequestToken;
             if (!detallado) mostrarEstadoSemanas('Cargando semanas...');
             try {
-                const res = await fetch(detallado ? '/api/semanas' : '/api/semanas?rapido=1');
+                const ruta = !detallado ? '/api/semanas?rapido=1'
+                    : semanaSeleccionada
+                        ? `/api/semanas?semana=${encodeURIComponent(semanaSeleccionada)}`
+                        : '/api/semanas?limite=4';
+                const res = await fetch(ruta);
                 const semanas = await respuestaJson(res, 'No se pudieron cargar las semanas.');
                 if (!Array.isArray(semanas)) throw new Error('No se pudieron cargar las semanas.');
                 if (requestToken !== weeksRequestToken) return;
@@ -1826,7 +1830,7 @@
             });
             mostrarEstadoTabla('Cargando facturas...');
             try {
-                const res = await fetch(`/api/facturas?semana=${encodeURIComponent(semana)}`);
+                const res = await fetchConTimeout(`/api/facturas?semana=${encodeURIComponent(semana)}`, {}, 45000);
                 const facturas = await respuestaJson(res, 'No se pudieron cargar las facturas.');
                 if (!Array.isArray(facturas)) throw new Error('No se pudieron cargar las facturas.');
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
@@ -1837,6 +1841,7 @@
                     mostrarEstadoTabla('Esta semana no contiene carpetas de factura.');
                     updateStats();
                     cargarRevision(false);
+                    if (!modoOffline) initSemanas(true);
                     return;
                 }
                 const tbody = document.getElementById("tablaBody");
@@ -2034,11 +2039,12 @@
             aplicarModoOffline(modoOffline, snapshotActualizado);
             updateStats();
             if (!modoOffline) cargarRevision(false);
+            if (!modoOffline) initSemanas(true);
             } catch (error) {
                 if (requestToken !== weekRequestToken || semana !== semanaSeleccionada) return;
                 facturasActuales = [];
                 tagsData = {};
-                mostrarEstadoTabla('No se pudieron cargar las facturas.', () => cargarFacturas(semana, elementoLista || document.querySelector('.week-item.active')));
+                mostrarEstadoTabla(error.message || 'No se pudieron cargar las facturas.', () => cargarFacturas(semana, elementoLista || document.querySelector('.week-item.active')));
                 updateStats();
             }
         }

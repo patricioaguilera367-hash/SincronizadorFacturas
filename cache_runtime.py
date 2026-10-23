@@ -410,6 +410,22 @@ def actualizar_snapshot_semanas(path_snapshot, semanas):
         return data["updated_at"]
 
 
+def fusionar_snapshot_semanas(path_snapshot, cambios, nombres_actuales=None):
+    """Actualiza sólo estados consultados sin perder semanas offline anteriores."""
+    with _LOCK:
+        data = cargar_snapshot(path_snapshot)
+        anteriores = {fila['nombre']: fila['estado'] for fila in data['weeks']
+                     if isinstance(fila, dict) and 'nombre' in fila and 'estado' in fila}
+        nuevos = {fila['nombre']: fila['estado'] for fila in cambios
+                  if isinstance(fila, dict) and 'nombre' in fila and 'estado' in fila}
+        nombres = nombres_actuales if nombres_actuales is not None else list(dict.fromkeys([*anteriores, *nuevos]))
+        data['weeks'] = [{'nombre': nombre, 'estado': nuevos.get(nombre, anteriores.get(nombre, 'loading'))}
+                         for nombre in nombres]
+        data['updated_at'] = _ahora()
+        _guardar_json_atomico(path_snapshot, data)
+        return data['updated_at']
+
+
 def actualizar_snapshot_facturas(path_snapshot, semana, facturas):
     if not isinstance(semana, str) or not semana:
         return None

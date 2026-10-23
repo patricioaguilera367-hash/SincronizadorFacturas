@@ -41,6 +41,15 @@ class AsyncRecoveryTests(unittest.TestCase):
         self.assertIn("actualizarEstadoSemana(button, semanaObj.estado)", detailed)
         self.assertNotIn("replaceChildren", detailed)
 
+    def test_status_refresh_scans_only_selected_or_recent_weeks(self):
+        weeks = self.body("async function initSemanas()", "function filtrarSemanas")
+        invoices = self.body("async function cargarFacturas", "async function copiarTablaExcel")
+
+        self.assertIn("'/api/semanas?limite=4'", weeks)
+        self.assertIn("/api/semanas?semana=${encodeURIComponent(semanaSeleccionada)}", weeks)
+        self.assertIn("initSemanas(true);", invoices)
+        self.assertIn("fetchConTimeout(`/api/facturas?semana=", invoices)
+
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for the renderer check")
     def test_initial_week_render_executes_without_undefined_bindings(self):
         helper = self.source.split("function actualizarEstadoSemana", 1)[1].split("async function initSemanas()", 1)[0]

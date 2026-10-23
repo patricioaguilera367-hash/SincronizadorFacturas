@@ -591,15 +591,15 @@ class FilesystemBoundaryTests(unittest.TestCase):
     def test_fast_week_discovery_skips_child_checks_and_detail_isolates_child_errors(self):
         second_week = self.facturas / "Semana 02"
         second_week.mkdir()
-        original_listdir = os.listdir
+        original_scandir = os.scandir
         blocked_week = os.path.normcase(os.path.realpath(self.factura.parent))
 
-        def listdir(path):
+        def scandir(path):
             if os.path.normcase(os.path.realpath(path)) == blocked_week:
                 raise PermissionError("inaccessible week")
-            return original_listdir(path)
+            return original_scandir(path)
 
-        with patch.object(servidor.os, "listdir", side_effect=listdir):
+        with patch.object(servidor.os, "scandir", side_effect=scandir):
             fast = self.client.get("/api/semanas?rapido=1")
             detailed = self.client.get("/api/semanas")
 
