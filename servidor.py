@@ -945,17 +945,30 @@ def _estado_semana(ruta_semana):
     return estado
 
 
-def _detalle_factura(ruta_factura, nombre):
+def _detalle_factura(ruta_factura, nombre, medir=False):
+    inicio = time.perf_counter() if medir else None
     internos, archivos = inspeccionar_factura(ruta_factura)
+    fin_archivos = time.perf_counter() if medir else None
     ot_content = leer_ot_metadata(ruta_factura, internos)
+    fin_ot = time.perf_counter() if medir else None
     ignorado = 'ignorado.txt' in internos
     estado = leer_estado_sync(ruta_factura, presente='.sync_state.json' in internos)
+    fin_sync = time.perf_counter() if medir else None
     # Ignorar sólo excluye la sincronización y la planilla OT, no la inspección.
     clase_b, texto_b = evaluar_estado_sync(ruta_factura, ot_content, estado=estado, archivos_actuales=archivos)
     estados = normalizar_estados_documentos(estado or {})['actual']
-    return {'nombre': nombre, 'ruta': ruta_factura, 'ot_content': ot_content,
-            'badge_class': clase_b, 'badge_text': texto_b, 'ignorado': ignorado,
-            'estados': estados}
+    datos = {'nombre': nombre, 'ruta': ruta_factura, 'ot_content': ot_content,
+             'badge_class': clase_b, 'badge_text': texto_b, 'ignorado': ignorado,
+             'estados': estados}
+    if not medir:
+        return datos
+    fin_evaluacion = time.perf_counter()
+    return datos, {
+        'enumerar_archivos': (fin_archivos - inicio) * 1000,
+        'leer_ot': (fin_ot - fin_archivos) * 1000,
+        'leer_sync': (fin_sync - fin_ot) * 1000,
+        'evaluar_estado': (fin_evaluacion - fin_sync) * 1000,
+    }
 
 @app.route('/api/facturas', methods=['GET'])
 def get_facturas():
@@ -963,25 +976,64 @@ def get_facturas():
     if not componente_aprobado(semana):
         return error_ruta_invalida()
 
+    medir = request.args.get('perf') == '1'
+    inicio = time.perf_counter() if medir else None
     if not _comprobar_servidor():
         return _respuesta_snapshot_facturas(semana)
+    fin_conexion = time.perf_counter() if medir else None
 
     try:
         ruta_semana = ruta_aprobada(BASE_FACTURAS, semana)
         facturas_data = []
+        operaciones = []
         if ruta_semana and os.path.isdir(ruta_semana):
             with os.scandir(ruta_semana) as carpetas:
                 rutas = [(ruta, carpeta.name) for carpeta in carpetas
                          if carpeta.is_dir(follow_symlinks=False)
                          if (ruta := ruta_aprobada(ruta_semana, carpeta.name))]
             rutas.sort(key=lambda elemento: elemento[1].casefold())
+            fin_enumeracion = time.perf_counter() if medir else None
             # I/O SMB paralelo y acotado; el resultado conserva el orden de las filas.
             with ThreadPoolExecutor(max_workers=LECTURAS_SIMULTANEAS) as ejecutor:
-                facturas_data = list(ejecutor.map(lambda par: _detalle_factura(*par), rutas))
+                if medir:
+                    resultados = list(ejecutor.map(lambda par: _detalle_factura(*par, medir=True), rutas))
+                    facturas_data = [datos for datos, _ in resultados]
+                    operaciones = [detalle for _, detalle in resultados]
+                else:
+                    facturas_data = list(ejecutor.map(lambda par: _detalle_factura(*par), rutas))
+        else:
+            fin_enumeracion = time.perf_counter() if medir else None
 
+        fin_procesamiento = time.perf_counter() if medir else None
         _marcar_estado_servidor(True)
         actualizar_snapshot_facturas(_snapshot_path(), semana, facturas_data)
-        return _respuesta_datos(facturas_data, offline=False)
+        fin_snapshot = time.perf_counter() if medir else None
+        respuesta = _respuesta_datos(facturas_data, offline=False)
+        if medir:
+            final = time.perf_counter()
+            duracion = lambda desde, hasta: round((hasta - desde) * 1000, 2)
+            perfil = {
+                'conexion_ms': duracion(inicio, fin_conexion),
+                'enumeracion_ms': duracion(fin_conexion, fin_enumeracion),
+                'procesamiento_ms': duracion(fin_enumeracion, fin_procesamiento),
+                'snapshot_ms': duracion(fin_procesamiento, fin_snapshot),
+                'serializacion_ms': duracion(fin_snapshot, final),
+                'total_ms': duracion(inicio, final),
+                'facturas': len(facturas_data),
+                # Son sumas de tiempo por carpeta; las cuatro lecturas se solapan.
+                'operaciones_acumuladas_ms': {
+                    nombre: round(sum(operacion[nombre] for operacion in operaciones), 2)
+                    for nombre in ('enumerar_archivos', 'leer_ot', 'leer_sync', 'evaluar_estado')
+                },
+            }
+            respuesta.headers['X-Sincronizador-Diagnostico'] = json.dumps(perfil)
+            respuesta.headers['Server-Timing'] = ', '.join(
+                f'{nombre};dur={perfil[campo]}' for nombre, campo in (
+                    ('conexion', 'conexion_ms'), ('carpetas', 'enumeracion_ms'),
+                    ('facturas', 'procesamiento_ms'), ('cache', 'snapshot_ms'),
+                    ('json', 'serializacion_ms'))
+            )
+        return respuesta
     except OSError:
         _marcar_estado_servidor(False)
         return _respuesta_snapshot_facturas(semana)

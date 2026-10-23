@@ -109,6 +109,23 @@ class PortableNasTests(unittest.TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.get_json()[0]['badge_class'], 'badge-danger')
 
+    def test_diagnostic_header_breaks_down_backend_without_changing_json(self):
+        servidor.actualizar_estado_sync(str(self.factura), ['OT1'])
+        normal = self.client.get('/api/facturas', query_string={'semana': self.semana.name})
+        perfilada = self.client.get('/api/facturas', query_string={'semana': self.semana.name, 'perf': '1'})
+
+        self.assertEqual(normal.get_json(), perfilada.get_json())
+        self.assertNotIn('X-Sincronizador-Diagnostico', normal.headers)
+        datos = json.loads(perfilada.headers['X-Sincronizador-Diagnostico'])
+        self.assertEqual(datos['facturas'], 1)
+        for campo in ('conexion_ms', 'enumeracion_ms', 'procesamiento_ms',
+                      'snapshot_ms', 'serializacion_ms', 'total_ms'):
+            self.assertIsInstance(datos[campo], (float, int))
+            self.assertGreaterEqual(datos[campo], 0)
+        for campo in ('enumerar_archivos', 'leer_ot', 'leer_sync', 'evaluar_estado'):
+            self.assertGreaterEqual(datos['operaciones_acumuladas_ms'][campo], 0)
+        self.assertIn('Server-Timing', perfilada.headers)
+
 
 if __name__ == '__main__':
     unittest.main()
